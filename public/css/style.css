@@ -1760,3 +1760,170 @@ input[type="radio"]:checked + .toggle-btn-danger  { background: var(--danger);  
     .modal-dialog { max-width: 100%; margin: 0; border-radius: var(--radius) var(--radius) 0 0; position: fixed; bottom: 0; left: 0; right: 0; }
     .modal-overlay { align-items: flex-end; padding: 0; }
 }
+
+/* ================================================================
+   MOVEMENTS — MOBILE ENHANCEMENTS
+================================================================ */
+
+/* Utility: show/hide per viewport */
+.show-mobile  { display: none; }
+.show-on-mobile { display: none !important; }
+
+@media (max-width: 900px) {
+    .show-mobile  { display: inline; }
+}
+
+/* ── Summary cards: 2×2 on mobile ────────────────────────────── */
+@media (max-width: 640px) {
+    .mov-summary-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
+
+    .mov-summary-grid .summary-card {
+        padding: 12px 10px;
+    }
+    .mov-summary-grid .summary-card-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+        margin-bottom: 6px;
+    }
+    .mov-summary-grid .summary-card-value { font-size: 15px; margin-bottom: 2px; }
+    .mov-summary-grid .summary-card-label { font-size: 11px; }
+}
+
+/* ── Filter: collapsible on mobile ───────────────────────────── */
+.filter-mobile-header { display: none; }
+
+@media (max-width: 900px) {
+    .filter-mobile-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        padding: 4px 0 12px;
+        font-size: 14px;
+        color: var(--text);
+        user-select: none;
+    }
+    .filter-toggle-icon {
+        transition: transform 0.2s ease;
+        color: var(--text-muted);
+    }
+    /* Hide form by default on mobile, show when .filter-open */
+    .filter-form {
+        display: none;
+        padding-top: 8px;
+        border-top: 1px solid var(--border);
+    }
+    .filter-form.filter-open { display: flex; }
+}
+
+/* ── Desktop table: hide on mobile ───────────────────────────── */
+@media (max-width: 900px) {
+    .hide-on-mobile { display: none !important; }
+    .show-on-mobile { display: block !important; }
+}
+
+/* ── Movement cards (mobile) ─────────────────────────────────── */
+.mov-card-list { display: flex; flex-direction: column; }
+
+.mov-card {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: background 0.15s;
+}
+.mov-card:last-child { border-bottom: none; }
+.mov-card:active { background: var(--bg-alt); }
+
+.mov-card-pending {
+    border-left: 3px solid #f59e0b;
+}
+
+.mov-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.mov-card-desc {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.mov-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mov-card-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+.mov-card-amount {
+    font-size: 16px;
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.mov-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.mov-card-date {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mov-card-mode {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-alt);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.mov-card-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 2px;
+}
+
+.mov-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.15s;
+}
+.mov-action-btn:active { opacity: 0.75; }
+
+.mov-action-success { background: #dcfce7; color: #16a34a; }
+.mov-action-warning { background: #fef9c3; color: #a16207; }
+.mov-action-primary { background: #e0e7ff; color: #4338ca; }
+.mov-action-danger  { background: #fee2e2; color: #dc2626; padding: 5px 8px; }

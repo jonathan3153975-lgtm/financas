@@ -1,8 +1,11 @@
 <?php
-$pageTitle = 'Dashboard – JW Finanças';
-$basePath  = $_ENV['APP_BASE_PATH'] ?? '/financas/public';
-$meses     = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-               'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+$pageTitle  = 'Dashboard – JW Finanças';
+$basePath   = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '');
+$meses      = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+$mesesShort = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+                'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+$modeLabels = ['unico' => 'Único', 'fixo' => 'Fixo', 'parcelamento' => 'Parcelado'];
 
 function fmtBrl(float $v): string {
     return 'R$ ' . number_format(abs($v), 2, ',', '.');
@@ -34,12 +37,9 @@ function fmtBrl(float $v): string {
 ================================================================ -->
 <div class="cards-grid cards-grid-4">
 
-    <!-- Receitas -->
     <div class="summary-card card-income">
         <div class="summary-card-header">
-            <div class="summary-card-icon">
-                <i class="fa-solid fa-arrow-trend-up"></i>
-            </div>
+            <div class="summary-card-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
             <div class="summary-card-badge">
                 <?php if ($deltaEntrada >= 0): ?>
                 <span class="badge badge-success"><i class="fa-solid fa-caret-up"></i> <?= abs($deltaEntrada) ?>%</span>
@@ -50,17 +50,12 @@ function fmtBrl(float $v): string {
         </div>
         <div class="summary-card-value"><?= fmtBrl($totalEntrada) ?></div>
         <div class="summary-card-label">Total de Receitas</div>
-        <div class="summary-card-footer">
-            <?= $meses[$mes] ?> / <?= $ano ?>
-        </div>
+        <div class="summary-card-footer"><?= $meses[$mes] ?> / <?= $ano ?></div>
     </div>
 
-    <!-- Despesas -->
     <div class="summary-card card-expense">
         <div class="summary-card-header">
-            <div class="summary-card-icon">
-                <i class="fa-solid fa-arrow-trend-down"></i>
-            </div>
+            <div class="summary-card-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
             <div class="summary-card-badge">
                 <?php if ($deltaSaida <= 0): ?>
                 <span class="badge badge-success"><i class="fa-solid fa-caret-down"></i> <?= abs($deltaSaida) ?>%</span>
@@ -80,28 +75,20 @@ function fmtBrl(float $v): string {
         </div>
     </div>
 
-    <!-- Saldo do Mês -->
     <div class="summary-card <?= $saldoMes >= 0 ? 'card-balance-pos' : 'card-balance-neg' ?>">
         <div class="summary-card-header">
-            <div class="summary-card-icon">
-                <i class="fa-solid fa-scale-balanced"></i>
-            </div>
+            <div class="summary-card-icon"><i class="fa-solid fa-scale-balanced"></i></div>
         </div>
         <div class="summary-card-value <?= $saldoMes < 0 ? 'text-danger' : '' ?>">
             <?= $saldoMes < 0 ? '- ' : '' ?><?= fmtBrl($saldoMes) ?>
         </div>
         <div class="summary-card-label">Saldo do Mês</div>
-        <div class="summary-card-footer">
-            <?= $meses[$mes] ?> / <?= $ano ?>
-        </div>
+        <div class="summary-card-footer"><?= $meses[$mes] ?> / <?= $ano ?></div>
     </div>
 
-    <!-- Saldo Total -->
     <div class="summary-card <?= $saldoTotal >= 0 ? 'card-total-pos' : 'card-total-neg' ?>">
         <div class="summary-card-header">
-            <div class="summary-card-icon">
-                <i class="fa-solid fa-piggy-bank"></i>
-            </div>
+            <div class="summary-card-icon"><i class="fa-solid fa-piggy-bank"></i></div>
         </div>
         <div class="summary-card-value <?= $saldoTotal < 0 ? 'text-danger' : '' ?>">
             <?= $saldoTotal < 0 ? '- ' : '' ?><?= fmtBrl($saldoTotal) ?>
@@ -117,10 +104,10 @@ function fmtBrl(float $v): string {
 ================================================================ -->
 <div class="charts-row">
 
-    <!-- Bar chart: Monthly comparison -->
+    <!-- Line chart: Monthly comparison -->
     <div class="card chart-card">
         <div class="card-header">
-            <h3 class="card-title"><i class="fa-solid fa-chart-bar"></i> Comparativo Mensal</h3>
+            <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Comparativo Mensal</h3>
             <span class="card-subtitle">Últimos 6 meses</span>
         </div>
         <div class="card-body">
@@ -148,17 +135,6 @@ function fmtBrl(float $v): string {
 
 </div>
 
-<!-- Line chart: Cash flow -->
-<div class="card chart-card-full">
-    <div class="card-header">
-        <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Fluxo de Caixa</h3>
-        <span class="card-subtitle"><?= $meses[$mes] ?>/<?= $ano ?></span>
-    </div>
-    <div class="card-body">
-        <canvas id="chartCashflow" height="120"></canvas>
-    </div>
-</div>
-
 <!-- ================================================================
      Recent Movements + Quick Actions
 ================================================================ -->
@@ -180,54 +156,107 @@ function fmtBrl(float $v): string {
                 </a>
             </div>
             <?php else: ?>
-            <table class="table table-hover">
-                <thead>
-                    <tr>
-                        <th>Data</th>
-                        <th>Descrição</th>
-                        <th>Categoria</th>
-                        <th>Tipo</th>
-                        <th class="text-right">Valor</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($recent as $mov): ?>
-                    <tr class="<?= !(bool)$mov['validado'] ? 'row-pending' : '' ?>">
-                        <td class="text-muted text-sm"><?= date('d/m/Y', strtotime($mov['data_competencia'])) ?></td>
-                        <td>
-                            <div class="mov-desc">
-                                <?php if ($mov['categoria_cor']): ?>
-                                <span class="cat-dot" style="background:<?= htmlspecialchars($mov['categoria_cor'] ?? '#6366f1') ?>"></span>
+
+            <!-- Desktop table -->
+            <div class="table-responsive hide-on-mobile">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Descrição</th>
+                            <th>Categoria</th>
+                            <th>Modo</th>
+                            <th class="text-right">Valor</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($recent as $mov): ?>
+                        <tr class="<?= !(bool)$mov['validado'] ? 'row-pending' : '' ?>">
+                            <td class="text-muted text-sm"><?= date('d/m/Y', strtotime($mov['data_competencia'])) ?></td>
+                            <td>
+                                <div class="mov-desc">
+                                    <?php if (!empty($mov['categoria_cor'])): ?>
+                                    <span class="cat-dot" style="background:<?= htmlspecialchars($mov['categoria_cor']) ?>"></span>
+                                    <?php endif; ?>
+                                    <div>
+                                        <div class="font-medium"><?= htmlspecialchars($mov['descricao']) ?></div>
+                                        <?php if (!empty($mov['subcategoria_nome'])): ?>
+                                        <div class="text-xs text-muted"><?= htmlspecialchars($mov['subcategoria_nome']) ?></div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-sm">
+                                <?php if (!empty($mov['categoria_nome'])): ?>
+                                <span class="cat-badge" style="background:<?= htmlspecialchars($mov['categoria_cor'] ?? '#6366f1') ?>20; color:<?= htmlspecialchars($mov['categoria_cor'] ?? '#6366f1') ?>">
+                                    <?= htmlspecialchars($mov['categoria_nome']) ?>
+                                </span>
+                                <?php else: ?>
+                                <span class="text-muted">—</span>
                                 <?php endif; ?>
-                                <?= htmlspecialchars($mov['descricao']) ?>
-                            </div>
-                        </td>
-                        <td class="text-muted text-sm"><?= htmlspecialchars($mov['categoria_nome'] ?? '—') ?></td>
-                        <td>
-                            <span class="badge <?= $mov['tipo'] === 'entrada' ? 'badge-success' : 'badge-danger' ?>">
-                                <?= $mov['tipo'] === 'entrada' ? 'Receita' : 'Despesa' ?>
-                            </span>
-                        </td>
-                        <td class="text-right font-semibold <?= $mov['tipo'] === 'entrada' ? 'text-success' : 'text-danger' ?>">
-                            <?= $mov['tipo'] === 'entrada' ? '+' : '-' ?> <?= fmtBrl((float) $mov['valor']) ?>
-                        </td>
-                        <td>
-                            <?php if ($mov['validado']): ?>
-                            <span class="badge badge-success"><i class="fa-solid fa-check"></i> Validado</span>
-                            <?php else: ?>
-                            <span class="badge badge-warning"><i class="fa-solid fa-clock"></i> Pendente</span>
+                            </td>
+                            <td class="text-sm text-muted">
+                                <?= $modeLabels[$mov['modo'] ?? 'unico'] ?? '—' ?>
+                            </td>
+                            <td class="text-right font-semibold <?= $mov['tipo'] === 'entrada' ? 'text-success' : 'text-danger' ?>">
+                                <?= $mov['tipo'] === 'entrada' ? '+' : '−' ?> <?= fmtBrl((float)$mov['valor']) ?>
+                            </td>
+                            <td>
+                                <?php if ($mov['validado']): ?>
+                                <span class="badge badge-success"><i class="fa-solid fa-check"></i> Validado</span>
+                                <?php else: ?>
+                                <span class="badge badge-warning"><i class="fa-solid fa-clock"></i> Pendente</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Mobile cards -->
+            <div class="mov-card-list show-on-mobile">
+                <?php foreach ($recent as $mov): ?>
+                <div class="mov-card <?= !(bool)$mov['validado'] ? 'mov-card-pending' : '' ?>">
+                    <div class="mov-card-top">
+                        <div class="mov-card-desc">
+                            <?php if (!empty($mov['categoria_cor'])): ?>
+                            <span class="cat-dot" style="background:<?= htmlspecialchars($mov['categoria_cor']) ?>"></span>
                             <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                            <div>
+                                <div class="mov-card-title"><?= htmlspecialchars($mov['descricao']) ?></div>
+                                <?php if (!empty($mov['subcategoria_nome'])): ?>
+                                <div class="mov-card-sub"><?= htmlspecialchars($mov['subcategoria_nome']) ?></div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div class="mov-card-amount <?= $mov['tipo'] === 'entrada' ? 'text-success' : 'text-danger' ?>">
+                            <?= $mov['tipo'] === 'entrada' ? '+' : '−' ?><?= fmtBrl((float)$mov['valor']) ?>
+                        </div>
+                    </div>
+                    <div class="mov-card-meta">
+                        <span class="mov-card-date"><i class="fa-regular fa-calendar"></i> <?= date('d/m/Y', strtotime($mov['data_competencia'])) ?></span>
+                        <?php if (!empty($mov['categoria_nome'])): ?>
+                        <span class="cat-badge" style="background:<?= htmlspecialchars($mov['categoria_cor'] ?? '#6366f1') ?>20; color:<?= htmlspecialchars($mov['categoria_cor'] ?? '#6366f1') ?>">
+                            <?= htmlspecialchars($mov['categoria_nome']) ?>
+                        </span>
+                        <?php endif; ?>
+                        <?php if ($mov['validado']): ?>
+                        <span class="badge badge-success"><i class="fa-solid fa-check"></i> Validado</span>
+                        <?php else: ?>
+                        <span class="badge badge-warning"><i class="fa-solid fa-clock"></i> Pendente</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+
             <?php endif; ?>
         </div>
     </div>
 
-    <!-- Quick actions -->
+    <!-- Quick actions + cards -->
     <div class="quick-actions-panel">
         <div class="card">
             <div class="card-header">
@@ -255,7 +284,6 @@ function fmtBrl(float $v): string {
             </div>
         </div>
 
-        <!-- Credit cards mini list -->
         <?php if (!empty($cards)): ?>
         <div class="card mt-4">
             <div class="card-header">
@@ -285,59 +313,88 @@ function fmtBrl(float $v): string {
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 
-    const chartDefaults = {
-        responsive: true,
-        plugins: {
-            legend: { labels: { font: { family: 'Inter', size: 12 }, color: '#64748b' } }
+    const tooltipBRL = {
+        callbacks: {
+            label: ctx => ' R$ ' + ctx.parsed.y.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
         }
     };
 
-    // ---- Monthly Comparison Bar Chart ----
-    const compData = <?= json_encode($comparison) ?>;
+    const axisY = {
+        beginAtZero: true,
+        grid: { color: 'rgba(0,0,0,0.05)' },
+        ticks: { color: '#64748b', callback: v => 'R$ ' + v.toLocaleString('pt-BR') }
+    };
+    const axisX = { grid: { display: false }, ticks: { color: '#64748b' } };
+
+    // ── Monthly Comparison — Line Chart ──────────────────────────
+    const compData   = <?= json_encode($comparison) ?>;
     const monthNames = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
     if (compData.length > 0 && document.getElementById('chartComparison')) {
+        const labels   = compData.map(d => monthNames[d.mes - 1] + '/' + String(d.ano).slice(-2));
+        const entradas = compData.map(d => parseFloat(d.total_entrada));
+        const saidas   = compData.map(d => parseFloat(d.total_saida));
+        const poupanca = compData.map((d, i) => Math.max(0, entradas[i] - saidas[i]));
+
         new Chart(document.getElementById('chartComparison'), {
-            type: 'bar',
+            type: 'line',
             data: {
-                labels: compData.map(d => monthNames[d.mes - 1] + '/' + String(d.ano).slice(-2)),
+                labels,
                 datasets: [
                     {
                         label: 'Receitas',
-                        data: compData.map(d => parseFloat(d.total_entrada)),
-                        backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                        data: entradas,
                         borderColor: '#10b981',
-                        borderWidth: 1,
-                        borderRadius: 6,
+                        backgroundColor: 'rgba(16,185,129,0.08)',
+                        borderWidth: 2.5,
+                        tension: 0.4,
+                        fill: false,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#10b981',
+                        pointHoverRadius: 6,
                     },
                     {
                         label: 'Despesas',
-                        data: compData.map(d => parseFloat(d.total_saida)),
-                        backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                        data: saidas,
                         borderColor: '#ef4444',
-                        borderWidth: 1,
-                        borderRadius: 6,
+                        backgroundColor: 'rgba(239,68,68,0.06)',
+                        borderWidth: 2.5,
+                        tension: 0.4,
+                        fill: false,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#ef4444',
+                        pointHoverRadius: 6,
+                    },
+                    {
+                        label: 'Poupança',
+                        data: poupanca,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59,130,246,0.08)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#3b82f6',
+                        pointHoverRadius: 5,
+                        borderDash: [5, 3],
                     }
                 ]
             },
             options: {
-                ...chartDefaults,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: 'rgba(0,0,0,0.05)' },
-                        ticks: {
-                            color: '#64748b',
-                            callback: v => 'R$ ' + v.toLocaleString('pt-BR')
-                        }
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        labels: { font: { family: 'Inter', size: 12 }, color: '#64748b', usePointStyle: true, pointStyleWidth: 10 }
                     },
-                    x: { grid: { display: false }, ticks: { color: '#64748b' } }
-                }
+                    tooltip: tooltipBRL
+                },
+                scales: { y: axisY, x: axisX }
             }
         });
     }
 
-    // ---- Expense by Category Doughnut ----
+    // ── Expense by Category — Doughnut ───────────────────────────
     const catData = <?= json_encode($expByCategory) ?>;
     if (catData.length > 0 && document.getElementById('chartCategories')) {
         new Chart(document.getElementById('chartCategories'), {
@@ -352,59 +409,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 }]
             },
             options: {
-                ...chartDefaults,
+                responsive: true,
                 cutout: '65%',
                 plugins: {
-                    ...chartDefaults.plugins,
+                    legend: { labels: { font: { family: 'Inter', size: 12 }, color: '#64748b' } },
                     tooltip: {
                         callbacks: {
                             label: ctx => ' R$ ' + ctx.parsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
                         }
                     }
-                }
-            }
-        });
-    }
-
-    // ---- Cash Flow Line Chart ----
-    const cfData = <?= json_encode($cashFlow) ?>;
-    if (cfData.length > 0 && document.getElementById('chartCashflow')) {
-        new Chart(document.getElementById('chartCashflow'), {
-            type: 'line',
-            data: {
-                labels: cfData.map(d => 'Dia ' + d.dia),
-                datasets: [
-                    {
-                        label: 'Entradas',
-                        data: cfData.map(d => parseFloat(d.entradas)),
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16,185,129,0.1)',
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#10b981',
-                    },
-                    {
-                        label: 'Saídas',
-                        data: cfData.map(d => parseFloat(d.saidas)),
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239,68,68,0.05)',
-                        tension: 0.4,
-                        fill: false,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#ef4444',
-                    }
-                ]
-            },
-            options: {
-                ...chartDefaults,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: 'rgba(0,0,0,0.05)' },
-                        ticks: { color: '#64748b', callback: v => 'R$ ' + v.toLocaleString('pt-BR') }
-                    },
-                    x: { grid: { display: false }, ticks: { color: '#64748b' } }
                 }
             }
         });

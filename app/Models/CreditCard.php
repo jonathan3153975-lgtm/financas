@@ -85,7 +85,7 @@ class CreditCard extends Model
         $cards = $this->findByUser($userId);
 
         $cat = $this->db->fetch(
-            "SELECT id FROM categorias WHERE tipo = 'despesa' AND nome LIKE '%inanceiro%' LIMIT 1"
+            "SELECT id FROM categorias WHERE tipo = 'despesa' AND nome LIKE '%artão%' LIMIT 1"
         );
         if (!$cat) {
             $cat = $this->db->fetch("SELECT id FROM categorias WHERE tipo = 'despesa' LIMIT 1");

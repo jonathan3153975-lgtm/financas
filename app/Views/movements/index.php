@@ -3,9 +3,12 @@ $pageTitle = 'Movimentações – JW Finanças';
 $basePath  = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '');
 $meses     = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
                'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+$mesesFull = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+               'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 function fmtBrl2(float $v): string {
     return 'R$ ' . number_format(abs($v), 2, ',', '.');
 }
+$modeLabels = ['unico' => 'Único', 'fixo' => 'Fixo', 'parcelamento' => 'Parcelado'];
 ?>
 
 <div class="page-header">
@@ -14,19 +17,19 @@ function fmtBrl2(float $v): string {
         <p class="page-subtitle">Controle de receitas e despesas</p>
     </div>
     <button class="btn btn-primary" onclick="openModal('modalMovimento')">
-        <i class="fa-solid fa-plus"></i> Nova Movimentação
+        <i class="fa-solid fa-plus"></i> <span class="hide-mobile">Nova Movimentação</span><span class="show-mobile">Novo</span>
     </button>
 </div>
 
 <!-- Summary cards -->
-<div class="cards-grid cards-grid-4">
+<div class="cards-grid cards-grid-4 mov-summary-grid">
     <div class="summary-card card-income">
         <div class="summary-card-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
         <div class="summary-card-value"><?= fmtBrl2($totalEntrada) ?></div>
         <div class="summary-card-label">
-            Total Receitas
+            Receitas
             <?php if (($pendingEntrada ?? 0) > 0): ?>
-            <span class="badge badge-warning ms-1"><?= $pendingEntrada ?> pendente<?= $pendingEntrada > 1 ? 's' : '' ?></span>
+            <span class="badge badge-warning ms-1"><?= $pendingEntrada ?>p</span>
             <?php endif; ?>
         </div>
     </div>
@@ -34,16 +37,16 @@ function fmtBrl2(float $v): string {
         <div class="summary-card-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
         <div class="summary-card-value"><?= fmtBrl2($totalSaida) ?></div>
         <div class="summary-card-label">
-            Total Despesas
+            Despesas
             <?php if (($pendingSaida ?? 0) > 0): ?>
-            <span class="badge badge-warning ms-1"><?= $pendingSaida ?> pendente<?= $pendingSaida > 1 ? 's' : '' ?></span>
+            <span class="badge badge-warning ms-1"><?= $pendingSaida ?>p</span>
             <?php endif; ?>
         </div>
     </div>
     <div class="summary-card <?= $saldoMes >= 0 ? 'card-balance-pos' : 'card-balance-neg' ?>">
         <div class="summary-card-icon"><i class="fa-solid fa-scale-balanced"></i></div>
         <div class="summary-card-value <?= $saldoMes < 0 ? 'text-danger' : '' ?>"><?= fmtBrl2($saldoMes) ?></div>
-        <div class="summary-card-label">Saldo do Mês</div>
+        <div class="summary-card-label">Saldo Mês</div>
     </div>
     <div class="summary-card card-total-pos">
         <div class="summary-card-icon"><i class="fa-solid fa-piggy-bank"></i></div>
@@ -54,10 +57,20 @@ function fmtBrl2(float $v): string {
 
 <!-- Filters -->
 <div class="card filter-card">
-    <form method="GET" action="<?= $basePath ?>/movimentacoes" class="filter-form">
+    <!-- Mobile: toggle header -->
+    <div class="filter-mobile-header" onclick="toggleFilters()">
+        <span><i class="fa-solid fa-sliders"></i> Filtros — <strong><?= $mesesFull[$mes] ?> <?= $ano ?></strong>
+            <?php if (!empty($filters['tipo']) || !empty($filters['validado']) || !empty($filters['search'])): ?>
+            <span class="badge badge-primary ms-1">Ativos</span>
+            <?php endif; ?>
+        </span>
+        <i class="fa-solid fa-chevron-down filter-toggle-icon" id="filterToggleIcon"></i>
+    </div>
+
+    <form method="GET" action="<?= $basePath ?>/movimentacoes" class="filter-form" id="filterForm">
         <div class="filter-group">
             <label class="filter-label">Mês</label>
-            <select name="mes" class="form-control form-control-sm">
+            <select name="mes" class="form-control form-control-sm" onchange="this.form.submit()">
                 <?php for ($m = 1; $m <= 12; $m++): ?>
                 <option value="<?= $m ?>" <?= $m === $mes ? 'selected' : '' ?>><?= $meses[$m] ?></option>
                 <?php endfor; ?>
@@ -65,7 +78,7 @@ function fmtBrl2(float $v): string {
         </div>
         <div class="filter-group">
             <label class="filter-label">Ano</label>
-            <select name="ano" class="form-control form-control-sm">
+            <select name="ano" class="form-control form-control-sm" onchange="this.form.submit()">
                 <?php for ($y = (int)date('Y') - 2; $y <= (int)date('Y') + 1; $y++): ?>
                 <option value="<?= $y ?>" <?= $y === $ano ? 'selected' : '' ?>><?= $y ?></option>
                 <?php endfor; ?>
@@ -73,7 +86,7 @@ function fmtBrl2(float $v): string {
         </div>
         <div class="filter-group">
             <label class="filter-label">Tipo</label>
-            <select name="tipo" class="form-control form-control-sm">
+            <select name="tipo" class="form-control form-control-sm" onchange="this.form.submit()">
                 <option value="">Todos</option>
                 <option value="entrada" <?= ($filters['tipo'] ?? '') === 'entrada' ? 'selected' : '' ?>>Receitas</option>
                 <option value="saida"   <?= ($filters['tipo'] ?? '') === 'saida'   ? 'selected' : '' ?>>Despesas</option>
@@ -81,7 +94,7 @@ function fmtBrl2(float $v): string {
         </div>
         <div class="filter-group">
             <label class="filter-label">Status</label>
-            <select name="validado" class="form-control form-control-sm">
+            <select name="validado" class="form-control form-control-sm" onchange="this.form.submit()">
                 <option value="">Todos</option>
                 <option value="1" <?= ($filters['validado'] ?? '') === '1' ? 'selected' : '' ?>>Validados</option>
                 <option value="0" <?= ($filters['validado'] ?? '') === '0' ? 'selected' : '' ?>>Pendentes</option>
@@ -101,8 +114,8 @@ function fmtBrl2(float $v): string {
     </form>
 </div>
 
-<!-- Movements Table -->
-<div class="card">
+<!-- Movements List -->
+<div class="card" id="movListCard">
     <div class="card-header">
         <h3 class="card-title">
             Movimentações
@@ -111,10 +124,11 @@ function fmtBrl2(float $v): string {
         <div class="card-header-actions">
             <a href="<?= $basePath ?>/relatorios/exportar/movimentos?mes=<?= $mes ?>&ano=<?= $ano ?>"
                class="btn btn-ghost btn-sm" title="Exportar CSV">
-                <i class="fa-solid fa-file-csv"></i> Exportar
+                <i class="fa-solid fa-file-csv"></i> <span class="hide-mobile">Exportar</span>
             </a>
         </div>
     </div>
+
     <div class="card-body p-0">
         <?php if (empty($movements)): ?>
         <div class="empty-state py-10">
@@ -125,7 +139,9 @@ function fmtBrl2(float $v): string {
             </button>
         </div>
         <?php else: ?>
-        <div class="table-responsive">
+
+        <!-- ── DESKTOP TABLE ────────────────────────────────────────── -->
+        <div class="table-responsive hide-on-mobile">
             <table class="table table-hover">
                 <thead>
                     <tr>
@@ -167,7 +183,6 @@ function fmtBrl2(float $v): string {
                             <?php endif; ?>
                         </td>
                         <td class="text-sm text-muted">
-                            <?php $modeLabels = ['unico' => 'Único', 'fixo' => 'Fixo', 'parcelamento' => 'Parcelado']; ?>
                             <?= $modeLabels[$mov['modo']] ?? $mov['modo'] ?>
                             <?php if ($mov['modo'] === 'parcelamento'): ?>
                             <span class="text-xs">(<?= $mov['parcela_atual'] ?>/<?= $mov['total_parcelas'] ?>)</span>
@@ -186,15 +201,13 @@ function fmtBrl2(float $v): string {
                         <td class="text-center">
                             <div class="action-buttons">
                                 <?php if (!$mov['validado']): ?>
-                                <button class="action-btn action-btn-success"
-                                        title="Validar"
+                                <button class="action-btn action-btn-success" title="Validar"
                                         onclick="validateMovement(<?= $mov['id'] ?>)"
                                         data-csrf="<?= htmlspecialchars($csrf) ?>">
                                     <i class="fa-solid fa-check"></i>
                                 </button>
                                 <?php else: ?>
-                                <button class="action-btn action-btn-warning"
-                                        title="Reverter"
+                                <button class="action-btn action-btn-warning" title="Reverter"
                                         onclick="revertMovement(<?= $mov['id'] ?>)"
                                         data-csrf="<?= htmlspecialchars($csrf) ?>">
                                     <i class="fa-solid fa-rotate-left"></i>
@@ -214,6 +227,76 @@ function fmtBrl2(float $v): string {
                     <?php endforeach; ?>
                 </tbody>
             </table>
+        </div>
+
+        <!-- ── MOBILE CARDS ─────────────────────────────────────────── -->
+        <div class="mov-card-list show-on-mobile">
+            <?php foreach ($movements as $mov): ?>
+            <div class="mov-card <?= !(bool)$mov['validado'] ? 'mov-card-pending' : '' ?>" data-id="<?= $mov['id'] ?>">
+                <div class="mov-card-top">
+                    <div class="mov-card-desc">
+                        <?php if (!empty($mov['categoria_cor'])): ?>
+                        <span class="cat-dot" style="background:<?= htmlspecialchars($mov['categoria_cor']) ?>"></span>
+                        <?php endif; ?>
+                        <div>
+                            <div class="mov-card-title"><?= htmlspecialchars($mov['descricao']) ?></div>
+                            <?php if (!empty($mov['subcategoria_nome'])): ?>
+                            <div class="mov-card-sub"><?= htmlspecialchars($mov['subcategoria_nome']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="mov-card-amount <?= $mov['tipo'] === 'entrada' ? 'text-success' : 'text-danger' ?>">
+                        <?= $mov['tipo'] === 'entrada' ? '+' : '−' ?><?= fmtBrl2((float)$mov['valor']) ?>
+                    </div>
+                </div>
+
+                <div class="mov-card-meta">
+                    <span class="mov-card-date"><i class="fa-regular fa-calendar"></i> <?= date('d/m/Y', strtotime($mov['data_competencia'])) ?></span>
+
+                    <?php if (!empty($mov['categoria_nome'])): ?>
+                    <span class="cat-badge" style="background:<?= htmlspecialchars($mov['categoria_cor'] ?? '#6366f1') ?>20; color:<?= htmlspecialchars($mov['categoria_cor'] ?? '#6366f1') ?>">
+                        <?= htmlspecialchars($mov['categoria_nome']) ?>
+                    </span>
+                    <?php endif; ?>
+
+                    <span class="mov-card-mode"><?= $modeLabels[$mov['modo']] ?? $mov['modo'] ?>
+                        <?php if ($mov['modo'] === 'parcelamento'): ?>
+                        <span class="text-xs"><?= $mov['parcela_atual'] ?>/<?= $mov['total_parcelas'] ?></span>
+                        <?php endif; ?>
+                    </span>
+
+                    <?php if ($mov['validado']): ?>
+                    <span class="badge badge-success"><i class="fa-solid fa-check"></i> Validado</span>
+                    <?php else: ?>
+                    <span class="badge badge-warning"><i class="fa-solid fa-clock"></i> Pendente</span>
+                    <?php endif; ?>
+                </div>
+
+                <div class="mov-card-actions">
+                    <?php if (!$mov['validado']): ?>
+                    <button class="mov-action-btn mov-action-success" title="Validar"
+                            onclick="validateMovement(<?= $mov['id'] ?>)"
+                            data-csrf="<?= htmlspecialchars($csrf) ?>">
+                        <i class="fa-solid fa-check"></i> Validar
+                    </button>
+                    <?php else: ?>
+                    <button class="mov-action-btn mov-action-warning" title="Reverter"
+                            onclick="revertMovement(<?= $mov['id'] ?>)"
+                            data-csrf="<?= htmlspecialchars($csrf) ?>">
+                        <i class="fa-solid fa-rotate-left"></i> Reverter
+                    </button>
+                    <?php endif; ?>
+                    <a href="<?= $basePath ?>/movimentacoes/<?= $mov['id'] ?>/editar"
+                       class="mov-action-btn mov-action-primary">
+                        <i class="fa-solid fa-pencil"></i> Editar
+                    </a>
+                    <button type="button" class="mov-action-btn mov-action-danger"
+                            onclick="deleteMovement(<?= $mov['id'] ?>, '<?= htmlspecialchars($csrf) ?>')">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <?php endforeach; ?>
         </div>
 
         <!-- Pagination -->
@@ -245,7 +328,6 @@ function fmtBrl2(float $v): string {
         <form method="POST" action="<?= $basePath ?>/movimentacoes" id="movForm">
             <div class="modal-body">
                 <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
-
                 <?php require BASE_PATH . '/app/Views/movements/form.php'; ?>
             </div>
             <div class="modal-footer">
@@ -259,11 +341,53 @@ function fmtBrl2(float $v): string {
 </div>
 
 <script>
-const BASE_PATH = '<?= $basePath ?>';
+const BASE_PATH  = '<?= $basePath ?>';
+const MOV_MES    = <?= $mes ?>;
+const MOV_ANO    = <?= $ano ?>;
 
+/* ── Filter toggle (mobile) ─────────────────────────────────── */
+function toggleFilters() {
+    const form = document.getElementById('filterForm');
+    const icon = document.getElementById('filterToggleIcon');
+    const open = form.classList.toggle('filter-open');
+    icon.style.transform = open ? 'rotate(180deg)' : '';
+}
+
+/* ── Month swipe navigation ──────────────────────────────────── */
+(function () {
+    let startX = 0, startY = 0;
+    const el = document.getElementById('movListCard') || document.body;
+
+    el.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+    }, { passive: true });
+
+    el.addEventListener('touchend', e => {
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = e.changedTouches[0].clientY - startY;
+        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+        navigateMonth(dx < 0 ? 1 : -1);
+    }, { passive: true });
+})();
+
+function navigateMonth(dir) {
+    const params = new URLSearchParams(window.location.search);
+    let mes = MOV_MES + dir;
+    let ano = MOV_ANO;
+    if (mes > 12) { mes = 1;  ano++; }
+    if (mes < 1)  { mes = 12; ano--; }
+    params.set('mes', mes);
+    params.set('ano', ano);
+    // keep other active filters, drop page
+    params.delete('page');
+    window.location.href = window.location.pathname + '?' + params.toString();
+}
+
+/* ── Actions ─────────────────────────────────────────────────── */
 async function validateMovement(id) {
     const csrf = document.querySelector(`[data-id="${id}"] .action-btn-success`)?.dataset.csrf
-              || document.querySelector('.action-btn-success')?.dataset.csrf
+              || document.querySelector(`[data-id="${id}"] .mov-action-success`)?.dataset.csrf
               || '<?= htmlspecialchars($csrf) ?>';
 
     const result = await Swal.fire({
