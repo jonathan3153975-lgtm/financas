@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(composer install:*)",
+      "Bash(php -l index.php)",
+      "Bash(php -l app/Core/Database.php)",
+      "Bash(php -l app/Core/Router.php)",
+      "Bash(php -l app/Core/Controller.php)",
+      "Bash(php -l app/Core/Model.php)",
+      "Bash(php -l app/Controllers/CardController.php)",
+      "Bash(php -l app/Controllers/PayrollController.php)",
+      "Bash(php -l app/Controllers/ReportController.php)",
+      "Bash(php -l app/Controllers/UserController.php)",
+      "Bash(php -l app/Models/CreditCard.php)",
+      "Bash(\"/c/Program Files/MariaDB 12.0/bin/mysql.exe\" -u root -pYSara6a9u financas -e \"SHOW TABLES; SELECT id, nome, cpf, email FROM usuarios LIMIT 3; SELECT COUNT\\(*\\) as categorias FROM categorias; SELECT COUNT\\(*\\) as subcategorias FROM subcategorias;\")",
+      "Bash(php -r \"echo password_hash\\(''Admin@123'', PASSWORD_BCRYPT, [''cost'' => 12]\\) . PHP_EOL;\")",
+      "Bash(\"/c/Program Files/MariaDB 12.0/bin/mysql.exe\" -u root -pYSara6a9u financas -e \"UPDATE usuarios SET senha = ''$2y$12$EgluZORl0wNihYLI5M/7AemBivR4mqyCj55PCNiiFbugs2pmzP1OK'' WHERE cpf = ''000.000.000-00'';\")",
+      "Bash(php -r \":*)",
+      "Bash(php -l app/Views/auth/login.php)",
+      "Bash(php -l app/Views/dashboard/index.php)",
+      "Bash(php -l app/Views/movements/index.php)",
+      "Bash(php -l app/Views/movements/form.php)",
+      "Bash(php -l app/Views/cards/index.php)",
+      "Bash(php -l c:/Users/j-wil/Documents/Github/financas/index.php)",
+      "Bash(php -l c:/Users/j-wil/Documents/Github/financas/app/Core/Database.php)",
+      "Bash(php -l c:/Users/j-wil/Documents/Github/financas/app/Core/Router.php)",
+      "Bash(php -l c:/Users/j-wil/Documents/Github/financas/app/Controllers/AuthController.php)",
+      "Bash(php -l c:/Users/j-wil/Documents/Github/financas/app/Controllers/DashboardController.php)"
+    ]
+  }
+}
