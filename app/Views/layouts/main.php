@@ -79,6 +79,10 @@
                 <i class="fa-solid fa-file-invoice-dollar nav-icon"></i>
                 <span>Folha de Pagamento</span>
             </a>
+            <a href="<?= $basePath ?>/dividas-parceladas" class="nav-item <?= $isActive('/dividas-parceladas') ? 'active' : '' ?>">
+                <i class="fa-solid fa-layer-group nav-icon"></i>
+                <span>Dívidas Parceladas</span>
+            </a>
         </div>
 
         <div class="nav-group">

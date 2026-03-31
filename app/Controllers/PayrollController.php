@@ -153,10 +153,7 @@ class PayrollController extends Controller
 
         // Cria movimentação de entrada vinculada
         $movId = $this->syncMovement($userId, $data);
-        Database::getInstance()->execute(
-            "UPDATE folha_pagamento SET movimentacao_id = ? WHERE id = ?",
-            [$movId, $folhaId]
-        );
+        $this->model->updateMovementLink((int) $folhaId, (int) $movId);
 
         $this->setFlash('success', 'Folha de pagamento registrada e lançada em movimentações!');
         $this->redirect('/folha-pagamento');
@@ -200,9 +197,6 @@ class PayrollController extends Controller
             return;
         }
 
-        // Delete existing items and recreate
-        $this->model->db->execute("DELETE FROM folha_itens WHERE folha_id = ?", [(int) $id]);
-
         $descricoes = $_POST['item_descricao'] ?? [];
         $tipos      = $_POST['item_tipo']      ?? [];
         $valores    = $_POST['item_valor']     ?? [];
@@ -236,22 +230,13 @@ class PayrollController extends Controller
         ];
 
         $this->model->update((int) $id, $data);
-
-        foreach ($itens as $item) {
-            $this->model->db->execute(
-                "INSERT INTO folha_itens (folha_id, descricao, tipo, valor) VALUES (?, ?, ?, ?)",
-                [(int) $id, $item['descricao'], $item['tipo'], $item['valor']]
-            );
-        }
+        $this->model->replaceItems((int) $id, $itens);
 
         // Atualiza ou cria movimentação vinculada
-        $movId = !empty($folha['movimentacao_id']) ? (int) $folha['movimentacao_id'] : null;
+        $movId = !empty($folha['movimentacao_id'] ?? null) ? (int) $folha['movimentacao_id'] : null;
         $newMovId = $this->syncMovement($this->getUserId(), $data, $movId);
         if (!$movId) {
-            Database::getInstance()->execute(
-                "UPDATE folha_pagamento SET movimentacao_id = ? WHERE id = ?",
-                [$newMovId, (int) $id]
-            );
+            $this->model->updateMovementLink((int) $id, (int) $newMovId);
         }
 
         $this->setFlash('success', 'Folha atualizada!');
@@ -271,7 +256,7 @@ class PayrollController extends Controller
         }
 
         // Remove movimentação vinculada
-        if (!empty($folha['movimentacao_id'])) {
+        if (!empty($folha['movimentacao_id'] ?? null)) {
             $this->movModel->delete((int) $folha['movimentacao_id']);
         }
 

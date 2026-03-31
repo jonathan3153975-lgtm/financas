@@ -10,6 +10,7 @@
 // Auth routes (no authentication required)
 // ----------------------------------------------------------------
 $router->get('/',                           'AuthController@loginForm',       false);
+$router->get('/login',                      'AuthController@loginForm',       false);
 $router->post('/login',                     'AuthController@login',           false);
 $router->get('/logout',                     'AuthController@logout',          false);
 $router->get('/forgot-password',            'AuthController@forgotPassword',  false);
@@ -37,6 +38,7 @@ $router->post('/movimentacoes/{id}',                'MovementController@update')
 $router->post('/movimentacoes/{id}/excluir',        'MovementController@destroy');
 $router->post('/movimentacoes/{id}/validar',        'MovementController@validate');
 $router->post('/movimentacoes/{id}/reverter',       'MovementController@revert');
+$router->post('/movimentacoes/dividas-parceladas/registrar', 'MovementController@storeDebtPayment');
 
 // ----------------------------------------------------------------
 // Credit cards
@@ -59,6 +61,13 @@ $router->post('/folha-pagamento',             'PayrollController@store');
 $router->get('/folha-pagamento/{id}/editar',  'PayrollController@edit');
 $router->post('/folha-pagamento/{id}',        'PayrollController@update');
 $router->post('/folha-pagamento/{id}/excluir','PayrollController@destroy');
+
+// ----------------------------------------------------------------
+// Installment debts
+// ----------------------------------------------------------------
+$router->get('/dividas-parceladas',             'InstallmentDebtController@index');
+$router->post('/dividas-parceladas',            'InstallmentDebtController@store');
+$router->post('/dividas-parceladas/pagamentos', 'InstallmentDebtController@registerPayment');
 
 // ----------------------------------------------------------------
 // Reports

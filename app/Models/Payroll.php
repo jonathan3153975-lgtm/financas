@@ -10,6 +10,7 @@ use App\Core\Model;
 class Payroll extends Model
 {
     protected string $table = 'folha_pagamento';
+    private ?bool $movementLinkColumnExists = null;
 
     /**
      * @return array<int,array<string,mixed>>
@@ -99,6 +100,58 @@ class Payroll extends Model
     public function deleteWithItems(int $id): void
     {
         $this->delete($id);
+    }
+
+    /**
+     * Replace all items of a payroll entry in a transaction.
+     *
+     * @param array<int,array{descricao:string,tipo:string,valor:float}> $itens
+     */
+    public function replaceItems(int $folhaId, array $itens): void
+    {
+        $this->db->beginTransaction();
+
+        try {
+            $this->db->execute("DELETE FROM folha_itens WHERE folha_id = ?", [$folhaId]);
+
+            foreach ($itens as $item) {
+                $this->db->execute(
+                    "INSERT INTO folha_itens (folha_id, descricao, tipo, valor) VALUES (?, ?, ?, ?)",
+                    [$folhaId, $item['descricao'], $item['tipo'], $item['valor']]
+                );
+            }
+
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            $this->db->rollback();
+            throw $e;
+        }
+    }
+
+    public function updateMovementLink(int $folhaId, int $movimentacaoId): void
+    {
+        if (!$this->hasMovementLinkColumn()) {
+            return;
+        }
+
+        $this->db->execute(
+            "UPDATE folha_pagamento SET movimentacao_id = ? WHERE id = ?",
+            [$movimentacaoId, $folhaId]
+        );
+    }
+
+    private function hasMovementLinkColumn(): bool
+    {
+        if ($this->movementLinkColumnExists !== null) {
+            return $this->movementLinkColumnExists;
+        }
+
+        $column = $this->db->fetch(
+            "SHOW COLUMNS FROM folha_pagamento LIKE 'movimentacao_id'"
+        );
+
+        $this->movementLinkColumnExists = $column !== null;
+        return $this->movementLinkColumnExists;
     }
 
     /**

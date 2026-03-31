@@ -9,6 +9,7 @@ use App\Models\FixedMovement;
 use App\Models\Category;
 use App\Models\Payroll;
 use App\Models\CreditCard;
+use App\Models\InstallmentDebt;
 
 /**
  * MovementController - Full CRUD for movements and fixed movements
@@ -20,6 +21,7 @@ class MovementController extends Controller
     private Category $catModel;
     private Payroll $payrollModel;
     private CreditCard $cardModel;
+    private InstallmentDebt $debtModel;
 
     public function __construct()
     {
@@ -29,6 +31,7 @@ class MovementController extends Controller
         $this->catModel     = new Category();
         $this->payrollModel = new Payroll();
         $this->cardModel    = new CreditCard();
+        $this->debtModel    = new InstallmentDebt();
     }
 
     // ----------------------------------------------------------------
@@ -69,6 +72,7 @@ class MovementController extends Controller
         $pendingByType = $this->model->getPendingCountByType($userId);
 
         $categories = $this->catModel->getAllWithSubcategories();
+        $openDebts  = $this->debtModel->findByUser($userId, true);
 
         $this->view('movements/index', [
             'movements'      => $result['data'],
@@ -86,6 +90,7 @@ class MovementController extends Controller
             'pendingEntrada' => $pendingByType['entrada'],
             'pendingSaida'   => $pendingByType['saida'],
             'categories'     => $categories,
+            'openDebts'      => $openDebts,
             'csrf'           => $this->csrfToken(),
             'flash'          => $this->getFlash(),
         ]);
@@ -246,7 +251,15 @@ class MovementController extends Controller
             return;
         }
 
-        $this->model->validate((int) $id);
+        try {
+            if ($this->debtModel->syncDebtOnMovementStatusChange((int) $movement['usuario_id'], (int) $id, true) === false) {
+                $this->model->validate((int) $id);
+            }
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'message' => $e->getMessage()], 400);
+            return;
+        }
+
         $this->json(['success' => true, 'message' => 'Movimentação validada!']);
     }
 
@@ -261,8 +274,42 @@ class MovementController extends Controller
             return;
         }
 
-        $this->model->revert((int) $id);
+        try {
+            if ($this->debtModel->syncDebtOnMovementStatusChange((int) $movement['usuario_id'], (int) $id, false) === false) {
+                $this->model->revert((int) $id);
+            }
+        } catch (\Throwable $e) {
+            $this->json(['success' => false, 'message' => $e->getMessage()], 400);
+            return;
+        }
+
         $this->json(['success' => true, 'message' => 'Movimentação revertida para pendente!']);
+    }
+
+    public function storeDebtPayment(): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $userId = $this->getUserId();
+        $debtId = (int) ($_POST['divida_id'] ?? 0);
+        $dataCompetencia = (string) ($_POST['data_competencia'] ?? date('Y-m-d'));
+
+        if ($debtId <= 0 || !$this->isValidDate($dataCompetencia)) {
+            $this->setFlash('error', 'Selecione uma dívida e informe uma data válida.');
+            $this->redirect('/movimentacoes');
+            return;
+        }
+
+        try {
+            $this->debtModel->registerPaymentInMovements((int) $userId, $debtId, $dataCompetencia);
+            $this->setFlash('success', 'Parcela lançada em movimentações como pendente.');
+        } catch (\Throwable $e) {
+            $this->setFlash('error', $e->getMessage());
+        }
+
+        $ts = strtotime($dataCompetencia);
+        $this->redirect('/movimentacoes?mes=' . (int) date('n', $ts) . '&ano=' . (int) date('Y', $ts));
     }
 
     // ----------------------------------------------------------------
@@ -390,5 +437,11 @@ class MovementController extends Controller
     {
         return !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
             && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+    }
+
+    private function isValidDate(string $date): bool
+    {
+        $dt = \DateTime::createFromFormat('Y-m-d', $date);
+        return $dt !== false && $dt->format('Y-m-d') === $date;
     }
 }

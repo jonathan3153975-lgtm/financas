@@ -5,6 +5,7 @@ $meses     = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
                'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 $mesesFull = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+$defaultDebtDate = sprintf('%04d-%02d-01', (int) $ano, (int) $mes);
 function fmtBrl2(float $v): string {
     return 'R$ ' . number_format(abs($v), 2, ',', '.');
 }
@@ -16,9 +17,14 @@ $modeLabels = ['unico' => 'Único', 'fixo' => 'Fixo', 'parcelamento' => 'Parcela
         <h1 class="page-title">Movimentações</h1>
         <p class="page-subtitle">Controle de receitas e despesas</p>
     </div>
-    <button class="btn btn-primary" onclick="openModal('modalMovimento')">
-        <i class="fa-solid fa-plus"></i> <span class="hide-mobile">Nova Movimentação</span><span class="show-mobile">Novo</span>
-    </button>
+    <div class="page-header-actions">
+        <button class="btn btn-warning" onclick="openModal('modalDividaMovimento')">
+            <i class="fa-solid fa-hand-holding-dollar"></i> <span class="hide-mobile">Lançar Dívida</span><span class="show-mobile">Dívida</span>
+        </button>
+        <button class="btn btn-primary" onclick="openModal('modalMovimento')">
+            <i class="fa-solid fa-plus"></i> <span class="hide-mobile">Nova Movimentação</span><span class="show-mobile">Novo</span>
+        </button>
+    </div>
 </div>
 
 <!-- Summary cards -->
@@ -334,6 +340,51 @@ $modeLabels = ['unico' => 'Único', 'fixo' => 'Fixo', 'parcelamento' => 'Parcela
                 <button type="button" class="btn btn-ghost" onclick="closeModal('modalMovimento')">Cancelar</button>
                 <button type="submit" class="btn btn-primary">
                     <i class="fa-solid fa-save"></i> Salvar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modalDividaMovimento" style="display:none">
+    <div class="modal-dialog">
+        <div class="modal-header">
+            <h3 class="modal-title"><i class="fa-solid fa-hand-holding-dollar"></i> Lançar Parcela de Dívida</h3>
+            <button class="modal-close" onclick="closeModal('modalDividaMovimento')">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <form method="POST" action="<?= $basePath ?>/movimentacoes/dividas-parceladas/registrar">
+            <div class="modal-body">
+                <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
+
+                <div class="form-group">
+                    <label class="form-label">Dívida</label>
+                    <select class="form-control" name="divida_id" required>
+                        <option value="">Selecione uma dívida...</option>
+                        <?php foreach (($openDebts ?? []) as $debt): ?>
+                        <option value="<?= (int) $debt['id'] ?>">
+                            <?= htmlspecialchars((string) $debt['descricao']) ?>
+                            | Parcela <?= (int) $debt['parcelas_pagas'] + 1 ?>/<?= (int) $debt['total_parcelas'] ?>
+                            | Saldo <?= fmtBrl2((float) $debt['saldo_devedor']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Data da parcela</label>
+                    <input type="date" class="form-control" name="data_competencia" value="<?= $defaultDebtDate ?>" required>
+                </div>
+
+                <p class="text-xs text-muted mt-2 mb-0">
+                    A movimentação será inserida como <strong>pendente</strong>. A parcela será contabilizada apenas ao validar.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('modalDividaMovimento')">Cancelar</button>
+                <button type="submit" class="btn btn-warning">
+                    <i class="fa-solid fa-check"></i> Confirmar
                 </button>
             </div>
         </form>

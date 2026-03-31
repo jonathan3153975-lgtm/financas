@@ -194,10 +194,13 @@ CREATE TABLE IF NOT EXISTS `folha_pagamento` (
     `ano_referencia` YEAR NOT NULL,
     `data_pagamento` DATE,
     `observacao`     TEXT,
+    `movimentacao_id` INT UNSIGNED NULL,
     `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `fk_fp_usuario` (`usuario_id`),
-    CONSTRAINT `fk_fp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
+    KEY `fk_fp_movimentacao` (`movimentacao_id`),
+    CONSTRAINT `fk_fp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`),
+    CONSTRAINT `fk_fp_movimentacao` FOREIGN KEY (`movimentacao_id`) REFERENCES `movimentacoes` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -212,6 +215,27 @@ CREATE TABLE IF NOT EXISTS `folha_itens` (
     PRIMARY KEY (`id`),
     KEY `fk_fi_folha` (`folha_id`),
     CONSTRAINT `fk_fi_folha` FOREIGN KEY (`folha_id`) REFERENCES `folha_pagamento` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- TABLE: dividas_parceladas
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `dividas_parceladas` (
+    `id`               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `usuario_id`       INT UNSIGNED NOT NULL,
+    `descricao`        VARCHAR(255) NOT NULL,
+    `valor_parcela`    DECIMAL(12,2) NOT NULL,
+    `total_parcelas`   SMALLINT UNSIGNED NOT NULL,
+    `parcelas_pagas`   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    `saldo_inicial`    DECIMAL(12,2) NOT NULL,
+    `saldo_devedor`    DECIMAL(12,2) NOT NULL,
+    `ativo`            TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `fk_dp_usuario` (`usuario_id`),
+    KEY `idx_dp_ativo` (`ativo`),
+    CONSTRAINT `fk_dp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -253,6 +277,7 @@ INSERT INTO `categorias` (`nome`, `tipo`, `icone`, `cor`) VALUES
 ('Utilidades (água/luz/gás)',     'despesa', 'fa-bolt',              '#f59e0b'),
 ('Cartão de Crédito',             'despesa', 'fa-credit-card',       '#6366f1'),
 ('Financeiro (empréstimos)',      'despesa', 'fa-landmark',          '#64748b'),
+('Dívidas parceladas',            'despesa', 'fa-hand-holding-dollar', '#0ea5e9'),
 ('Comunicação',                  'despesa', 'fa-mobile-alt',        '#06b6d4'),
 ('Pets',                         'despesa', 'fa-paw',               '#84cc16'),
 ('Viagens',                      'despesa', 'fa-plane',             '#0ea5e9'),
