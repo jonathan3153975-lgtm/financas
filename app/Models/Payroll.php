@@ -67,6 +67,30 @@ class Payroll extends Model
     }
 
     /**
+     * Progressive IRRF table (2025).
+     * base = sum(proventos compoe_ir) - sum(descontos compoe_ir, excluding the IR row itself)
+     */
+    public function calculateIR(float $base): float
+    {
+        if ($base <= 2259.20) return 0.0;
+
+        $table = [
+            [2826.65, 0.075, 169.44],
+            [3751.05, 0.150, 381.44],
+            [4664.68, 0.225, 662.77],
+            [PHP_FLOAT_MAX, 0.275, 896.00],
+        ];
+
+        foreach ($table as [$limit, $rate, $deduction]) {
+            if ($base <= $limit) {
+                return max(0.0, round($base * $rate - $deduction, 2));
+            }
+        }
+
+        return 0.0;
+    }
+
+    /**
      * Create a payroll with its line items in a transaction.
      *
      * @param array<string,mixed> $data
@@ -81,8 +105,17 @@ class Payroll extends Model
 
             foreach ($itens as $item) {
                 $this->db->execute(
-                    "INSERT INTO `folha_itens` (`folha_id`, `descricao`, `tipo`, `valor`) VALUES (?, ?, ?, ?)",
-                    [$folhaId, $item['descricao'], $item['tipo'], $item['valor']]
+                    "INSERT INTO `folha_itens` (`folha_id`, `descricao`, `tipo`, `valor`, `compoe_ir`, `valor_base`, `quantidade`)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        $folhaId,
+                        $item['descricao'],
+                        $item['tipo'],
+                        $item['valor'],
+                        $item['compoe_ir'] ?? 1,
+                        $item['valor_base'] ?? null,
+                        $item['quantidade']  ?? null,
+                    ]
                 );
             }
 
@@ -116,8 +149,17 @@ class Payroll extends Model
 
             foreach ($itens as $item) {
                 $this->db->execute(
-                    "INSERT INTO folha_itens (folha_id, descricao, tipo, valor) VALUES (?, ?, ?, ?)",
-                    [$folhaId, $item['descricao'], $item['tipo'], $item['valor']]
+                    "INSERT INTO folha_itens (`folha_id`, `descricao`, `tipo`, `valor`, `compoe_ir`, `valor_base`, `quantidade`)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        $folhaId,
+                        $item['descricao'],
+                        $item['tipo'],
+                        $item['valor'],
+                        $item['compoe_ir'] ?? 1,
+                        $item['valor_base'] ?? null,
+                        $item['quantidade']  ?? null,
+                    ]
                 );
             }
 

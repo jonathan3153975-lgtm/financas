@@ -52,7 +52,7 @@ class DashboardController extends Controller
             : 0;
 
         // Pending count
-        $pendingCount = $movModel->getPendingCount($userId);
+        $pendingCount = $movModel->getPendingCount($userId, $mes, $ano);
 
         // Monthly comparison (last 6 months)
         $comparison = $movModel->getMonthlyComparison($userId, 6);

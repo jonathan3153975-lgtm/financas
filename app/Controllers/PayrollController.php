@@ -26,13 +26,12 @@ class PayrollController extends Controller
     // Helper: sincroniza folha com movimentação de entrada
     // ----------------------------------------------------------------
 
-    private function syncMovement(int $userId, array $data, ?int $movimentacaoId = null): int
+    private function syncMovement(int $userId, array $data, ?int $movimentacaoId = null, ?int $folhaId = null): int
     {
         $db = Database::getInstance();
 
-        // Busca categoria "Salário" ou primeira categoria de receita
         $cat = $db->fetch(
-            "SELECT id FROM categorias WHERE tipo = 'receita' AND nome LIKE '%salário%' LIMIT 1"
+            "SELECT id FROM categorias WHERE tipo = 'receita' AND nome LIKE '%alário%' LIMIT 1"
         );
         if (!$cat) {
             $cat = $db->fetch("SELECT id FROM categorias WHERE tipo = 'receita' LIMIT 1");
@@ -41,6 +40,10 @@ class PayrollController extends Controller
 
         $dataComp = !empty($data['data_pagamento']) ? $data['data_pagamento']
                     : sprintf('%04d-%02d-01', $data['ano_referencia'], $data['mes_referencia']);
+
+        $obs = $folhaId
+            ? "[FOLHA_ID:{$folhaId}] Gerado automaticamente pela Folha de Pagamento"
+            : 'Gerado automaticamente pela Folha de Pagamento';
 
         $movData = [
             'usuario_id'       => $userId,
@@ -55,7 +58,7 @@ class PayrollController extends Controller
             'parcela_atual'    => 1,
             'total_parcelas'   => 1,
             'validado'         => 0,
-            'observacao'       => 'Gerado automaticamente pela Folha de Pagamento',
+            'observacao'       => $obs,
         ];
 
         if ($movimentacaoId) {
@@ -105,23 +108,42 @@ class PayrollController extends Controller
 
         $userId = $this->getUserId();
 
-        $descricoes     = $_POST['item_descricao'] ?? [];
-        $tipos          = $_POST['item_tipo']      ?? [];
-        $valores        = $_POST['item_valor']     ?? [];
+        $descricoes   = $_POST['item_descricao']  ?? [];
+        $tipos        = $_POST['item_tipo']       ?? [];
+        $valores      = $_POST['item_valor']      ?? [];
+        $compoeIrArr  = $_POST['item_compoe_ir']  ?? [];
+        $valBases     = $_POST['item_valor_base'] ?? [];
+        $quantidades  = $_POST['item_quantidade'] ?? [];
 
-        $itens   = [];
-        $bruto   = 0.0;
+        $itens     = [];
+        $bruto     = 0.0;
         $descontos = [];
 
         foreach ($descricoes as $i => $desc) {
-            $v   = (float) str_replace(['.', ','], ['', '.'], $valores[$i] ?? '0');
-            $t   = $tipos[$i] ?? 'provento';
-            $itens[] = ['descricao' => trim($desc), 'tipo' => $t, 'valor' => $v];
+            $desc = trim($desc);
+            if ($desc === '') continue;
+
+            $v        = (float) str_replace(['.', ','], ['', '.'], $valores[$i] ?? '0');
+            $t        = $tipos[$i] ?? 'provento';
+            $compoeIr = (int) ($compoeIrArr[$i] ?? 1);
+            $vBase    = ($valBases[$i] ?? '') !== ''
+                ? (float) str_replace(['.', ','], ['', '.'], $valBases[$i])
+                : null;
+            $qty = ($quantidades[$i] ?? '') !== '' ? (float) $quantidades[$i] : null;
+
+            $itens[] = [
+                'descricao'  => $desc,
+                'tipo'       => $t,
+                'valor'      => $v,
+                'compoe_ir'  => $compoeIr,
+                'valor_base' => $vBase,
+                'quantidade' => $qty,
+            ];
 
             if ($t === 'provento') {
                 $bruto += $v;
             } else {
-                $descontos[trim($desc)] = $v;
+                $descontos[$desc] = $v;
             }
         }
 
@@ -151,8 +173,8 @@ class PayrollController extends Controller
             [$userId, $previewMonth]
         );
 
-        // Cria movimentação de entrada vinculada
-        $movId = $this->syncMovement($userId, $data);
+        // Cria movimentação de entrada vinculada com marcador FOLHA_ID
+        $movId = $this->syncMovement($userId, $data, null, (int) $folhaId);
         $this->model->updateMovementLink((int) $folhaId, (int) $movId);
 
         $this->setFlash('success', 'Folha de pagamento registrada e lançada em movimentações!');
@@ -197,22 +219,42 @@ class PayrollController extends Controller
             return;
         }
 
-        $descricoes = $_POST['item_descricao'] ?? [];
-        $tipos      = $_POST['item_tipo']      ?? [];
-        $valores    = $_POST['item_valor']     ?? [];
+        $descricoes  = $_POST['item_descricao']  ?? [];
+        $tipos       = $_POST['item_tipo']       ?? [];
+        $valores     = $_POST['item_valor']      ?? [];
+        $compoeIrArr = $_POST['item_compoe_ir']  ?? [];
+        $valBases    = $_POST['item_valor_base'] ?? [];
+        $quantidades = $_POST['item_quantidade'] ?? [];
 
         $bruto     = 0.0;
         $descontos = [];
         $itens     = [];
 
         foreach ($descricoes as $i => $desc) {
-            $v  = (float) str_replace(['.', ','], ['', '.'], $valores[$i] ?? '0');
-            $t  = $tipos[$i] ?? 'provento';
-            $itens[] = ['descricao' => trim($desc), 'tipo' => $t, 'valor' => $v];
+            $desc = trim($desc);
+            if ($desc === '') continue;
+
+            $v        = (float) str_replace(['.', ','], ['', '.'], $valores[$i] ?? '0');
+            $t        = $tipos[$i] ?? 'provento';
+            $compoeIr = (int) ($compoeIrArr[$i] ?? 1);
+            $vBase    = ($valBases[$i] ?? '') !== ''
+                ? (float) str_replace(['.', ','], ['', '.'], $valBases[$i])
+                : null;
+            $qty = ($quantidades[$i] ?? '') !== '' ? (float) $quantidades[$i] : null;
+
+            $itens[] = [
+                'descricao'  => $desc,
+                'tipo'       => $t,
+                'valor'      => $v,
+                'compoe_ir'  => $compoeIr,
+                'valor_base' => $vBase,
+                'quantidade' => $qty,
+            ];
+
             if ($t === 'provento') {
                 $bruto += $v;
             } else {
-                $descontos[trim($desc)] = $v;
+                $descontos[$desc] = $v;
             }
         }
 
@@ -233,8 +275,8 @@ class PayrollController extends Controller
         $this->model->replaceItems((int) $id, $itens);
 
         // Atualiza ou cria movimentação vinculada
-        $movId = !empty($folha['movimentacao_id'] ?? null) ? (int) $folha['movimentacao_id'] : null;
-        $newMovId = $this->syncMovement($this->getUserId(), $data, $movId);
+        $movId    = !empty($folha['movimentacao_id'] ?? null) ? (int) $folha['movimentacao_id'] : null;
+        $newMovId = $this->syncMovement($this->getUserId(), $data, $movId, (int) $id);
         if (!$movId) {
             $this->model->updateMovementLink((int) $id, (int) $newMovId);
         }

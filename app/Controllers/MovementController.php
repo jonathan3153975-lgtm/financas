@@ -64,12 +64,13 @@ class MovementController extends Controller
 
         $result = $this->model->findByUser($userId, $filters);
 
-        $totalEntrada  = $this->model->getTotalByType($userId, 'entrada', $mes, $ano);
-        $totalSaida    = $this->model->getTotalByType($userId, 'saida',   $mes, $ano);
-        $saldoMes      = $this->model->getMonthBalance($userId, $mes, $ano);
+        $totals        = $this->model->getTotalsForFilter($userId, $filters);
+        $totalEntrada  = $totals['entrada'];
+        $totalSaida    = $totals['saida'];
+        $saldoMes      = $totals['saldo'];
         $saldoTotal    = $this->model->getTotalBalance($userId);
-        $pendingCount  = $this->model->getPendingCount($userId);
-        $pendingByType = $this->model->getPendingCountByType($userId);
+        $pendingCount  = $this->model->getPendingCount($userId, $mes, $ano);
+        $pendingByType = $this->model->getPendingCountByType($userId, $mes, $ano);
 
         $categories = $this->catModel->getAllWithSubcategories();
         $openDebts  = $this->debtModel->findByUser($userId, true);
@@ -171,6 +172,19 @@ class MovementController extends Controller
         $this->redirect('/movimentacoes?mes=' . (int)date('m', strtotime($dataComp)) . '&ano=' . (int)date('Y', strtotime($dataComp)));
     }
 
+    public function getData(string $id): void
+    {
+        $this->requireAuth();
+
+        $movement = $this->model->find((int) $id);
+        if ($movement === null || (int) $movement['usuario_id'] !== $this->getUserId()) {
+            $this->json(['success' => false, 'message' => 'Não encontrada.'], 404);
+            return;
+        }
+
+        $this->json(['success' => true, 'movement' => $movement]);
+    }
+
     public function edit(string $id): void
     {
         $this->requireAuth();
@@ -214,6 +228,11 @@ class MovementController extends Controller
         }
 
         $this->model->update((int) $id, $data);
+
+        if ($this->isAjax()) {
+            $this->json(['success' => true, 'message' => 'Movimentação atualizada!']);
+            return;
+        }
 
         $this->setFlash('success', 'Movimentação atualizada!');
         $this->redirect('/movimentacoes');

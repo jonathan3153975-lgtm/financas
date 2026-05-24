@@ -42,7 +42,8 @@ class InstallmentDebtController extends Controller
         }
         $paidPrevious = $this->model->getMonthlyPaid($userId, $prevMes, $prevAno);
 
-        $series = $this->model->getReductionSeries($userId, 8);
+        $series   = $this->model->getReductionSeries($userId, 8);
+        $savings  = $this->model->getTotalSavings($userId);
 
         $labels = $series['labels'] ?? [];
         $totals = $series['totals'] ?? [];
@@ -79,18 +80,20 @@ class InstallmentDebtController extends Controller
         }
 
         $this->view('debts/index', [
-            'debts' => $debts,
-            'openDebts' => $openDebts,
-            'mes' => $mes,
-            'ano' => $ano,
+            'debts'            => $debts,
+            'openDebts'        => $openDebts,
+            'mes'              => $mes,
+            'ano'              => $ano,
             'totalOutstanding' => $totalOutstanding,
-            'openCount' => $openCount,
-            'paidCurrent' => $paidCurrent,
-            'paidPrevious' => $paidPrevious,
-            'series' => $series,
-            'motivation' => $motivation,
-            'csrf' => $this->csrfToken(),
-            'flash' => $this->getFlash(),
+            'openCount'        => $openCount,
+            'paidCurrent'      => $paidCurrent,
+            'paidPrevious'     => $paidPrevious,
+            'series'           => $series,
+            'motivation'       => $motivation,
+            'totalEconomia'    => $savings['economia'],
+            'totalJuros'       => $savings['juros'],
+            'csrf'             => $this->csrfToken(),
+            'flash'            => $this->getFlash(),
         ]);
     }
 
@@ -101,10 +104,13 @@ class InstallmentDebtController extends Controller
 
         $userId = (int) $this->getUserId();
 
-        $descricao = trim($_POST['descricao'] ?? '');
-        $valorParcela = $this->parseMoney($_POST['valor_parcela'] ?? '0');
+        $descricao     = trim($_POST['descricao'] ?? '');
+        $valorParcela  = $this->parseMoney($_POST['valor_parcela'] ?? '0');
         $totalParcelas = (int) ($_POST['total_parcelas'] ?? 0);
         $parcelasPagas = (int) ($_POST['parcelas_pagas'] ?? 0);
+        $diaVencimento = max(1, min(28, (int) ($_POST['dia_vencimento'] ?? 1)));
+        $mesInicio     = (int) ($_POST['mes_inicio'] ?? date('m'));
+        $anoInicio     = (int) ($_POST['ano_inicio'] ?? date('Y'));
 
         if ($descricao === '' || $valorParcela <= 0 || $totalParcelas <= 0) {
             $this->setFlash('error', 'Preencha descrição, valor da parcela e total de parcelas.');
@@ -118,14 +124,26 @@ class InstallmentDebtController extends Controller
             return;
         }
 
-        $this->model->createDebt($userId, [
-            'descricao' => $descricao,
-            'valor_parcela' => $valorParcela,
+        $dataInicio = ($mesInicio >= 1 && $mesInicio <= 12 && $anoInicio >= 2000)
+            ? sprintf('%04d-%02d-01', $anoInicio, $mesInicio)
+            : null;
+
+        $debtId = $this->model->createDebt($userId, [
+            'descricao'      => $descricao,
+            'valor_parcela'  => $valorParcela,
             'total_parcelas' => $totalParcelas,
             'parcelas_pagas' => $parcelasPagas,
+            'data_inicio'    => $dataInicio,
+            'dia_vencimento' => $diaVencimento,
         ]);
 
-        $this->setFlash('success', 'Dívida parcelada cadastrada com sucesso!');
+        if ($dataInicio !== null) {
+            $this->model->generateInstallmentPreviews($userId, $debtId);
+            $this->setFlash('success', 'Dívida cadastrada e parcelas lançadas em movimentações como previsão!');
+        } else {
+            $this->setFlash('success', 'Dívida parcelada cadastrada com sucesso!');
+        }
+
         $this->redirect('/dividas-parceladas');
     }
 

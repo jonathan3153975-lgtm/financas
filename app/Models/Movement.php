@@ -84,6 +84,58 @@ class Movement extends Model
     }
 
     /**
+     * Totals (entrada, saida, saldo) applying the same filter set as findByUser.
+     *
+     * @param array<string,mixed> $filters
+     * @return array{entrada: float, saida: float, saldo: float}
+     */
+    public function getTotalsForFilter(int $userId, array $filters): array
+    {
+        $where  = ['usuario_id = :uid'];
+        $params = ['uid' => $userId];
+
+        if (!empty($filters['mes']) && !empty($filters['ano'])) {
+            $where[]       = 'MONTH(data_competencia) = :mes AND YEAR(data_competencia) = :ano';
+            $params['mes'] = (int) $filters['mes'];
+            $params['ano'] = (int) $filters['ano'];
+        }
+        if (!empty($filters['tipo'])) {
+            $where[]        = 'tipo = :tipo';
+            $params['tipo'] = $filters['tipo'];
+        }
+        if (!empty($filters['categoria_id'])) {
+            $where[]       = 'categoria_id = :cat';
+            $params['cat'] = (int) $filters['categoria_id'];
+        }
+        if (isset($filters['validado']) && $filters['validado'] !== '') {
+            $where[]              = 'validado = :validado';
+            $params['validado']   = (int) $filters['validado'];
+        }
+        if (!empty($filters['search'])) {
+            $where[]            = 'descricao LIKE :search';
+            $params['search']   = '%' . $filters['search'] . '%';
+        }
+
+        $whereStr = implode(' AND ', $where);
+
+        $row = $this->db->fetch(
+            "SELECT
+                COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0)  AS total_entrada,
+                COALESCE(SUM(CASE WHEN tipo = 'saida'   THEN valor ELSE 0 END), 0)  AS total_saida,
+                COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE -valor END), 0) AS saldo
+             FROM `{$this->table}`
+             WHERE {$whereStr}",
+            $params
+        );
+
+        return [
+            'entrada' => (float) ($row['total_entrada'] ?? 0),
+            'saida'   => (float) ($row['total_saida']   ?? 0),
+            'saldo'   => (float) ($row['saldo']          ?? 0),
+        ];
+    }
+
+    /**
      * Sum of validated + pending movements by type for a given month.
      */
     public function getTotalByType(int $userId, string $tipo, int $mes, int $ano): float
@@ -121,36 +173,36 @@ class Movement extends Model
     }
 
     /**
-     * Count pending (not validated) movements for the current month.
+     * Count pending (not validated) movements for the given month/year.
      */
-    public function getPendingCount(int $userId): int
+    public function getPendingCount(int $userId, int $mes, int $ano): int
     {
         $row = $this->db->fetch(
             "SELECT COUNT(*) AS cnt
              FROM `{$this->table}`
              WHERE usuario_id = ? AND validado = 0
-               AND MONTH(data_competencia) = MONTH(CURDATE())
-               AND YEAR(data_competencia)  = YEAR(CURDATE())",
-            [$userId]
+               AND MONTH(data_competencia) = ?
+               AND YEAR(data_competencia)  = ?",
+            [$userId, $mes, $ano]
         );
         return (int) ($row['cnt'] ?? 0);
     }
 
     /**
-     * Count pending by type (entrada / saida) for the current month.
+     * Count pending by type (entrada / saida) for the given month/year.
      *
      * @return array{entrada: int, saida: int}
      */
-    public function getPendingCountByType(int $userId): array
+    public function getPendingCountByType(int $userId, int $mes, int $ano): array
     {
         $rows = $this->db->fetchAll(
             "SELECT tipo, COUNT(*) AS cnt
              FROM `{$this->table}`
              WHERE usuario_id = ? AND validado = 0
-               AND MONTH(data_competencia) = MONTH(CURDATE())
-               AND YEAR(data_competencia)  = YEAR(CURDATE())
+               AND MONTH(data_competencia) = ?
+               AND YEAR(data_competencia)  = ?
              GROUP BY tipo",
-            [$userId]
+            [$userId, $mes, $ano]
         );
         $result = ['entrada' => 0, 'saida' => 0];
         foreach ($rows as $r) {

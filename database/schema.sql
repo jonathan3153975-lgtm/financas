@@ -227,8 +227,12 @@ CREATE TABLE IF NOT EXISTS `dividas_parceladas` (
     `valor_parcela`    DECIMAL(12,2) NOT NULL,
     `total_parcelas`   SMALLINT UNSIGNED NOT NULL,
     `parcelas_pagas`   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    `data_inicio`      DATE NULL,
+    `dia_vencimento`   TINYINT UNSIGNED NOT NULL DEFAULT 1,
     `saldo_inicial`    DECIMAL(12,2) NOT NULL,
     `saldo_devedor`    DECIMAL(12,2) NOT NULL,
+    `total_economia`   DECIMAL(12,2) NOT NULL DEFAULT 0,
+    `total_juros`      DECIMAL(12,2) NOT NULL DEFAULT 0,
     `ativo`            TINYINT(1) NOT NULL DEFAULT 1,
     `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -275,14 +279,14 @@ INSERT INTO `categorias` (`nome`, `tipo`, `icone`, `cor`) VALUES
 ('Lazer e Entretenimento',       'despesa', 'fa-film',              '#8b5cf6'),
 ('Vestuário',                    'despesa', 'fa-tshirt',            '#14b8a6'),
 ('Utilidades (água/luz/gás)',     'despesa', 'fa-bolt',              '#f59e0b'),
-('Cartão de Crédito',             'despesa', 'fa-credit-card',       '#6366f1'),
-('Financeiro (empréstimos)',      'despesa', 'fa-landmark',          '#64748b'),
-('Dívidas parceladas',            'despesa', 'fa-hand-holding-dollar', '#0ea5e9'),
-('Comunicação',                  'despesa', 'fa-mobile-alt',        '#06b6d4'),
-('Pets',                         'despesa', 'fa-paw',               '#84cc16'),
-('Viagens',                      'despesa', 'fa-plane',             '#0ea5e9'),
-('Impostos',                     'despesa', 'fa-file-invoice',      '#dc2626'),
-('Outros (despesa)',              'despesa', 'fa-minus-circle',      '#6b7280');
+('Cartão de Crédito',             'despesa', 'fa-credit-card',         '#6366f1'),
+('Financeiro (empréstimos)',      'despesa', 'fa-landmark',            '#64748b'),
+('Comunicação',                  'despesa', 'fa-mobile-alt',          '#06b6d4'),
+('Pets',                         'despesa', 'fa-paw',                 '#84cc16'),
+('Viagens',                      'despesa', 'fa-plane',               '#0ea5e9'),
+('Impostos',                     'despesa', 'fa-file-invoice',        '#dc2626'),
+('Outros (despesa)',              'despesa', 'fa-minus-circle',        '#6b7280'),
+('Dívidas parceladas',            'despesa', 'fa-hand-holding-dollar', '#0ea5e9');
 
 -- ============================================================
 -- SEED: subcategorias (receitas - id 1..6)
@@ -334,7 +338,7 @@ INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
 (6, 'Herança');
 
 -- ============================================================
--- SEED: subcategorias (despesas - id 7..20)
+-- SEED: subcategorias (despesas - id 7..22)
 -- ============================================================
 -- Alimentação (7)
 INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
@@ -407,48 +411,50 @@ INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
 (14, 'Internet'),
 (14, 'TV a Cabo');
 
--- Financeiro (15)
+-- Financeiro (empréstimos) (16)
 INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
-(15, 'Empréstimo Pessoal'),
-(15, 'Financiamento Imóvel'),
-(15, 'Financiamento Veículo'),
-(15, 'Juros / Multas'),
-(15, 'Tarifa Bancária');
+(16, 'Empréstimo Pessoal'),
+(16, 'Financiamento Imóvel'),
+(16, 'Financiamento Veículo'),
+(16, 'Juros / Multas'),
+(16, 'Tarifa Bancária');
 
--- Comunicação (16)
+-- Comunicação (17)
 INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
-(16, 'Celular / Plano'),
-(16, 'Telefone Fixo'),
-(16, 'Correios / Envios');
+(17, 'Celular / Plano'),
+(17, 'Telefone Fixo'),
+(17, 'Correios / Envios');
 
--- Pets (17)
+-- Pets (18)
 INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
-(17, 'Ração'),
-(17, 'Veterinário'),
-(17, 'Banho e Tosa'),
-(17, 'Pet Shop');
+(18, 'Ração'),
+(18, 'Veterinário'),
+(18, 'Banho e Tosa'),
+(18, 'Pet Shop');
 
--- Viagens (18)
+-- Viagens (19)
 INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
-(18, 'Passagens Aéreas'),
-(18, 'Hospedagem'),
-(18, 'Passeios Turísticos'),
-(18, 'Alimentação Viagem');
+(19, 'Passagens Aéreas'),
+(19, 'Hospedagem'),
+(19, 'Passeios Turísticos'),
+(19, 'Alimentação Viagem');
 
--- Impostos (19)
+-- Impostos (20)
 INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
-(19, 'Imposto de Renda'),
-(19, 'INSS'),
-(19, 'IPTU'),
-(19, 'Contribuição Sindical'),
-(19, 'Outros Tributos');
+(20, 'Imposto de Renda'),
+(20, 'INSS'),
+(20, 'IPTU'),
+(20, 'Contribuição Sindical'),
+(20, 'Outros Tributos');
 
--- Outros despesa (20)
+-- Outros (despesa) (21)
 INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
-(20, 'Presente / Doação'),
-(20, 'Assinatura Diversa'),
-(20, 'Despesa Imprevista'),
-(20, 'Multas');
+(21, 'Presente / Doação'),
+(21, 'Assinatura Diversa'),
+(21, 'Despesa Imprevista'),
+(21, 'Multas');
+
+-- Cartão de Crédito (15) e Dívidas parceladas (22): sem subcategorias fixas
 
 -- ============================================================
 -- SEED: test user (CPF: 000.000.000-00 / senha: Admin@123)

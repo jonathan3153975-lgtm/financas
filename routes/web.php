@@ -34,6 +34,7 @@ $router->post('/movimentacoes/fixas',               'MovementController@fixedSto
 $router->post('/movimentacoes/fixas/{id}',          'MovementController@fixedUpdate');
 $router->post('/movimentacoes/fixas/{id}/toggle',   'MovementController@fixedToggle');
 $router->get('/movimentacoes/{id}/editar',          'MovementController@edit');
+$router->get('/movimentacoes/{id}/json',            'MovementController@getData');
 $router->post('/movimentacoes/{id}',                'MovementController@update');
 $router->post('/movimentacoes/{id}/excluir',        'MovementController@destroy');
 $router->post('/movimentacoes/{id}/validar',        'MovementController@validate');
