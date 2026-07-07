@@ -15,7 +15,7 @@
 | **Nome**        | Admin Teste            |
 | **CPF (login)** | `000.000.000-00`       |
 | **E-mail**      | admin@financas.local   |
-| **Senha**       | `  ` *(senha do seed — confirmar se CPF foi atualizado manualmente)* |
+| **Senha**       | `` *(senha do seed — confirmar se CPF foi atualizado manualmente)* |
 | **Plano**       | Premium (plano_id = 2) |
 | **Ativo**       | Sim                    |
 
