@@ -80,6 +80,24 @@ CREATE TABLE IF NOT EXISTS `subcategorias` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
+-- TABLE: poupancas
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `poupancas` (
+    `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `usuario_id`    INT UNSIGNED NOT NULL,
+    `nome`          VARCHAR(100) NOT NULL,
+    `saldo_inicial` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    `cor`           VARCHAR(7) DEFAULT '#10b981',
+    `descricao`     TEXT,
+    `ativo`         TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `fk_poupancas_usuario` (`usuario_id`),
+    CONSTRAINT `fk_poupancas_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
 -- TABLE: movimentacoes
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `movimentacoes` (
@@ -96,6 +114,7 @@ CREATE TABLE IF NOT EXISTS `movimentacoes` (
     `parcela_atual`    SMALLINT UNSIGNED DEFAULT 1,
     `total_parcelas`   SMALLINT UNSIGNED DEFAULT 1,
     `validado`         TINYINT(1) NOT NULL DEFAULT 0,
+    `poupanca_id`      INT UNSIGNED NULL,
     `observacao`       TEXT,
     `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -103,10 +122,12 @@ CREATE TABLE IF NOT EXISTS `movimentacoes` (
     KEY `fk_mov_usuario`       (`usuario_id`),
     KEY `fk_mov_categoria`     (`categoria_id`),
     KEY `fk_mov_subcategoria`  (`subcategoria_id`),
+    KEY `fk_mov_poupanca`      (`poupanca_id`),
     KEY `idx_mov_data`         (`data_competencia`),
     CONSTRAINT `fk_mov_usuario`      FOREIGN KEY (`usuario_id`)      REFERENCES `usuarios`     (`id`),
     CONSTRAINT `fk_mov_categoria`    FOREIGN KEY (`categoria_id`)    REFERENCES `categorias`   (`id`),
-    CONSTRAINT `fk_mov_subcategoria` FOREIGN KEY (`subcategoria_id`) REFERENCES `subcategorias`(`id`)
+    CONSTRAINT `fk_mov_subcategoria` FOREIGN KEY (`subcategoria_id`) REFERENCES `subcategorias`(`id`),
+    CONSTRAINT `fk_mov_poupanca`     FOREIGN KEY (`poupanca_id`)     REFERENCES `poupancas`    (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -121,6 +142,7 @@ CREATE TABLE IF NOT EXISTS `movimentacoes_fixas` (
     `subcategoria_id` INT UNSIGNED,
     `valor`           DECIMAL(12,2) NOT NULL,
     `dia_vencimento`  TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    `data_fim`        DATE NULL,
     `ativo`           TINYINT(1) NOT NULL DEFAULT 1,
     `observacao`      TEXT,
     `created_at`      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -212,6 +234,9 @@ CREATE TABLE IF NOT EXISTS `folha_itens` (
     `descricao` VARCHAR(255) NOT NULL,
     `tipo`      ENUM('provento','desconto') NOT NULL,
     `valor`     DECIMAL(12,2) NOT NULL,
+    `compoe_ir` TINYINT(1) NOT NULL DEFAULT 1,
+    `valor_base` DECIMAL(12,2) DEFAULT NULL,
+    `quantidade` DECIMAL(8,2) DEFAULT NULL,
     PRIMARY KEY (`id`),
     KEY `fk_fi_folha` (`folha_id`),
     CONSTRAINT `fk_fi_folha` FOREIGN KEY (`folha_id`) REFERENCES `folha_pagamento` (`id`) ON DELETE CASCADE
@@ -240,6 +265,29 @@ CREATE TABLE IF NOT EXISTS `dividas_parceladas` (
     KEY `fk_dp_usuario` (`usuario_id`),
     KEY `idx_dp_ativo` (`ativo`),
     CONSTRAINT `fk_dp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- TABLE: poupanca_movimentos
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `poupanca_movimentos` (
+    `id`              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `poupanca_id`     INT UNSIGNED NOT NULL,
+    `usuario_id`      INT UNSIGNED NOT NULL,
+    `tipo`            ENUM('deposito','saque') NOT NULL,
+    `valor`           DECIMAL(12,2) NOT NULL,
+    `descricao`       VARCHAR(255) DEFAULT NULL,
+    `data`            DATE NOT NULL,
+    `movimentacao_id` INT UNSIGNED NULL,
+    `created_at`      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `fk_pm_poupanca` (`poupanca_id`),
+    KEY `fk_pm_usuario` (`usuario_id`),
+    KEY `fk_pm_movimentacao` (`movimentacao_id`),
+    KEY `idx_pm_data` (`data`),
+    CONSTRAINT `fk_pm_poupanca` FOREIGN KEY (`poupanca_id`) REFERENCES `poupancas` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pm_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_pm_movimentacao` FOREIGN KEY (`movimentacao_id`) REFERENCES `movimentacoes` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -287,6 +335,13 @@ INSERT INTO `categorias` (`nome`, `tipo`, `icone`, `cor`) VALUES
 ('Impostos',                     'despesa', 'fa-file-invoice',        '#dc2626'),
 ('Outros (despesa)',              'despesa', 'fa-minus-circle',        '#6b7280'),
 ('Dívidas parceladas',            'despesa', 'fa-hand-holding-dollar', '#0ea5e9');
+
+-- ============================================================
+-- SEED: categorias (poupança / reserva)
+-- ============================================================
+INSERT INTO `categorias` (`nome`, `tipo`, `icone`, `cor`) VALUES
+('Poupança / Reserva', 'receita', 'fa-piggy-bank', '#22c55e'),
+('Poupança / Reserva', 'despesa', 'fa-piggy-bank', '#22c55e');
 
 -- ============================================================
 -- SEED: subcategorias (receitas - id 1..6)
@@ -454,7 +509,7 @@ INSERT INTO `subcategorias` (`categoria_id`, `nome`) VALUES
 (21, 'Despesa Imprevista'),
 (21, 'Multas');
 
--- Cartão de Crédito (15) e Dívidas parceladas (22): sem subcategorias fixas
+-- Cartão de Crédito (15), Dívidas parceladas (22) e Poupança / Reserva (23, 24): sem subcategorias fixas
 
 -- ============================================================
 -- SEED: test user (CPF: 000.000.000-00 / senha: Admin@123)
