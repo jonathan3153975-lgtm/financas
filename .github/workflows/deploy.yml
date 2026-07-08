@@ -70,7 +70,10 @@ jobs:
           ssh -vvv -i ~/.ssh/deploy_key -p "$SSH_PORT" \
             -l "$SSH_USER" "$SSH_HOST" \
             "set -euo pipefail; \
-            mkdir -p '$REMOTE_PATH'; \
+            echo 'HOME remoto:' \"\$HOME\"; \
+            pwd; \
+            test -d '$REMOTE_PATH' || { echo 'REMOTE_PATH nao existe: $REMOTE_PATH'; exit 1; }; \
+            test -w '$REMOTE_PATH' || { echo 'Sem permissao de escrita em REMOTE_PATH: $REMOTE_PATH'; exit 1; }; \
             ls -la '$REMOTE_PATH'; \
             touch '$REMOTE_PATH/.deploy_write_test'; \
             rm -f '$REMOTE_PATH/.deploy_write_test'"
