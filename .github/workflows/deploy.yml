@@ -59,7 +59,7 @@ jobs:
             -l "$SSH_USER" "$SSH_HOST" \
             "echo 'SSH conectado com sucesso' && pwd && ls -la"
 
-      - name: Check remote path
+      - name: Check remote path and permissions
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -69,7 +69,11 @@ jobs:
           set -euxo pipefail
           ssh -vvv -i ~/.ssh/deploy_key -p "$SSH_PORT" \
             -l "$SSH_USER" "$SSH_HOST" \
-            "ls -la '$REMOTE_PATH'"
+            "set -euo pipefail; \
+            mkdir -p '$REMOTE_PATH'; \
+            ls -la '$REMOTE_PATH'; \
+            touch '$REMOTE_PATH/.deploy_write_test'; \
+            rm -f '$REMOTE_PATH/.deploy_write_test'"
 
       - name: Deploy files
         env:
