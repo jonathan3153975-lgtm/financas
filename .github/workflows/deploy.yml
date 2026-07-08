@@ -49,3 +49,4 @@ jobs:
             --exclude=".github/" \
             ./ \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}
+
