@@ -24,6 +24,7 @@ jobs:
 
       - name: Configure SSH
         run: |
+          set -euxo pipefail
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
@@ -31,19 +32,22 @@ jobs:
 
       - name: Test SSH
         run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} \
+          set -euxo pipefail
+          ssh -vvv -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             "echo 'SSH conectado com sucesso' && pwd && ls -la"
 
       - name: Check remote path
         run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} \
+          set -euxo pipefail
+          ssh -vvv -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             "ls -la ${{ secrets.REMOTE_PATH }}"
 
       - name: Deploy files
         run: |
-          rsync -avz --delete --progress \
+          set -euxo pipefail
+          rsync -avz --delete --progress -vv --itemize-changes --stats \
             -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}" \
             --exclude=".git/" \
             --exclude=".github/" \
