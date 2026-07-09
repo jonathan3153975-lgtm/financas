@@ -7,7 +7,7 @@
  *   $csrf       (string)
  *   $basePath   (string)
  */
-$basePath  = $basePath  ?? ($_ENV['APP_BASE_PATH'] ?? '/financas/public');
+$basePath  = $basePath  ?? (defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '/financas'));
 $movement  = $movement  ?? null;
 $isEdit    = $movement !== null;
 ?>

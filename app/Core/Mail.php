@@ -43,7 +43,7 @@ class Mail
     public function sendPasswordReset(string $email, string $name, string $token): bool
     {
         $appUrl  = rtrim($_ENV['APP_URL'] ?? 'http://localhost', '/');
-        $appPath = $_ENV['APP_BASE_PATH'] ?? '/financas/public';
+        $appPath = $_ENV['APP_BASE_PATH'] ?? '/financas';
         $link    = $appUrl . $appPath . '/reset-password/' . $token;
         $appName = $_ENV['APP_NAME'] ?? 'JW Finanças';
 

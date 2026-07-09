@@ -1,6 +1,6 @@
 <?php
 $pageTitle = 'Meu Perfil – JW Finanças';
-$basePath  = $_ENV['APP_BASE_PATH'] ?? '/financas/public';
+$basePath  = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '/financas');
 $ufs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 ?>
 

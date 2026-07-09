@@ -62,7 +62,7 @@ abstract class Controller
 
     protected function redirect(string $url): void
     {
-        $appPath = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '');
+        $appPath = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '/financas');
 
         if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
             header('Location: ' . $url);

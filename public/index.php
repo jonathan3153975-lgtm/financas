@@ -3,21 +3,22 @@
 defined('BASE_PATH') || define('BASE_PATH', dirname(__DIR__));
 
 // -----------------------------------------------------------------
-// Calcula BASE_URL usando comparação de filesystem.
-// Normaliza backslashes e faz comparação case-insensitive
-// para compatibilidade com Windows (XAMPP, Laragon, etc.)
+// Calcula BASE_URL para instalação em subpasta.
+// Preferência: APP_BASE_PATH do ambiente.
+// Fallback: deriva do SCRIPT_NAME e remove /public quando presente.
 // -----------------------------------------------------------------
-$docRoot   = str_replace('\\', '/', realpath($_SERVER['DOCUMENT_ROOT'] ?? '') ?: '');
-$publicDir = str_replace('\\', '/', realpath(__DIR__) ?: '');
+$appBasePath = trim((string) ($_ENV['APP_BASE_PATH'] ?? ''));
 
-if ($docRoot !== '' && $publicDir !== '' && stripos($publicDir, $docRoot) === 0) {
-    // public/ está dentro do document root
-    $rel = substr($publicDir, strlen($docRoot));
-    define('BASE_URL', rtrim($rel, '/'));
+if ($appBasePath !== '') {
+    define('BASE_URL', rtrim($appBasePath, '/'));
 } else {
-    // Fallback: deriva do SCRIPT_NAME
-    $scriptDir = dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php');
-    define('BASE_URL', rtrim(str_replace('\\', '/', $scriptDir), '/'));
+    $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php'));
+
+    if (str_ends_with($scriptDir, '/public')) {
+        $scriptDir = substr($scriptDir, 0, -strlen('/public'));
+    }
+
+    define('BASE_URL', rtrim($scriptDir, '/'));
 }
 
 require BASE_PATH . '/index.php';

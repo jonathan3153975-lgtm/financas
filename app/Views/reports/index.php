@@ -1,6 +1,6 @@
 <?php
 $pageTitle = 'Relatórios – JW Finanças';
-$basePath  = $_ENV['APP_BASE_PATH'] ?? '/financas/public';
+$basePath  = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '/financas');
 $meses     = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 ?>

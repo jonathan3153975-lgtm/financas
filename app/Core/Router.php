@@ -96,7 +96,7 @@ class Router
 
     private function parseUri(): string
     {
-        $base = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '');
+        $base = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '/financas');
         $uri  = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
         if ($base !== '' && str_starts_with($uri, $base)) {
@@ -164,7 +164,7 @@ class Router
 
     private function redirectTo(string $path): void
     {
-        $appPath = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '');
+        $appPath = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '/financas');
         // URL relativa: funciona em qualquer porta/domínio
         header('Location: ' . $appPath . $path);
         exit;

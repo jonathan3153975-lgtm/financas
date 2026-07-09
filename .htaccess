@@ -1,7 +1,6 @@
 RewriteEngine On
 RewriteBase /financas/
 
-# Redirect to public directory (external redirect)
-# This keeps REQUEST_URI aligned with BASE_URL (/financas/public)
+# Redirect to public directory (internal rewrite)
 RewriteCond %{REQUEST_URI} !^/financas/public/
-RewriteRule ^(.*)$ /financas/public/$1 [R=302,L]
+RewriteRule ^(.*)$ public/$1 [L]

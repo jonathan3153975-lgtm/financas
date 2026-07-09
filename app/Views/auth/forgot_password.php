@@ -1,6 +1,6 @@
 <?php
 $pageTitle = 'Esqueci minha senha – JW Finanças';
-$basePath  = $_ENV['APP_BASE_PATH'] ?? '/financas/public';
+$basePath  = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '/financas');
 ?>
 <div class="auth-centered">
     <div class="auth-simple-card">

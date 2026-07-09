@@ -22,7 +22,7 @@
     <h1>Página não encontrada</h1>
     <p>A página que você está procurando não existe ou foi movida.</p>
     <?php
-    $basePath = $_ENV['APP_BASE_PATH'] ?? '/financas/public';
+    $basePath = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '/financas');
     ?>
     <a href="<?= $basePath ?>/dashboard">Ir para o Dashboard</a>
 </div>
