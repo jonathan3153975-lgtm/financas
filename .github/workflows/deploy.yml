@@ -47,6 +47,13 @@ jobs:
           case "$SSH_PORT" in
             ''|*[!0-9]*) echo "Secret SSH_PORT invalido"; exit 1 ;;
           esac
+          case "$REMOTE_PATH" in
+            /domains/*)
+              echo "REMOTE_PATH invalido para hospedagem compartilhada: $REMOTE_PATH"
+              echo "Use ~/domains/<dominio>/public_html/... ou /home/<usuario>/domains/<dominio>/public_html/..."
+              exit 1
+              ;;
+          esac
 
       - name: Test SSH
         env:
