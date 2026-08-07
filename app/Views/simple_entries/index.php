@@ -2,6 +2,7 @@
 $pageTitle = 'Módulo Simples - Entradas e Saídas';
 $basePath  = defined('BASE_URL') ? BASE_URL : ($_ENV['APP_BASE_PATH'] ?? '');
 $meses     = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+$todayDate = date('Y-m-d');
 
 function fmtSimpleMoney(float $v): string {
     return 'R$ ' . number_format(abs($v), 2, ',', '.');
@@ -201,13 +202,13 @@ function fmtSimpleMoney(float $v): string {
                     </div>
                     <div class="form-group col-6">
                         <label class="form-label">Valor</label>
-                        <input type="number" class="form-control" step="0.01" min="0.01" name="valor" required>
+                        <input type="text" class="form-control currency-input" name="valor" required>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group col-6">
                         <label class="form-label">Data</label>
-                        <input type="date" class="form-control" name="data_referencia" value="<?= sprintf('%04d-%02d-01', (int) $ano, (int) $mes) ?>" required>
+                        <input type="date" class="form-control" name="data_referencia" value="<?= $todayDate ?>" required>
                     </div>
                     <div class="form-group col-6">
                         <label class="form-label">Observação</label>
@@ -250,7 +251,7 @@ function fmtSimpleMoney(float $v): string {
                     </div>
                     <div class="form-group col-6">
                         <label class="form-label">Valor</label>
-                        <input type="number" class="form-control" step="0.01" min="0.01" id="se_valor" name="valor" required>
+                        <input type="text" class="form-control currency-input" id="se_valor" name="valor" required>
                     </div>
                 </div>
                 <div class="form-row">
@@ -405,7 +406,11 @@ function openSimpleEdit(btn) {
 
     document.getElementById('se_descricao').value = btn.dataset.descricao || '';
     document.getElementById('se_tipo').value = btn.dataset.tipo || 'saida';
-    document.getElementById('se_valor').value = btn.dataset.valor || '0.00';
+    const rawValue = parseFloat(btn.dataset.valor || '0');
+    document.getElementById('se_valor').value = rawValue.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
     document.getElementById('se_data').value = btn.dataset.data || '';
     document.getElementById('se_observacao').value = btn.dataset.observacao || '';
 
@@ -431,6 +436,10 @@ async function deleteSimpleRecord(id) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.currency-input').forEach(input => {
+        input.addEventListener('input', function () { currencyMask(this); });
+    });
+
     const bar = document.getElementById('simpleFooterBar');
     if (bar) {
         const h = bar.offsetHeight || 52;

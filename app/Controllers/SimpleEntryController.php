@@ -245,12 +245,26 @@ class SimpleEntryController extends Controller
             return 0.0;
         }
 
-        if (str_contains($raw, ',')) {
-            $normalized = str_replace('.', '', $raw);
+        $normalized = preg_replace('/[^\d,\.\-]/', '', $raw) ?? '';
+        if ($normalized === '' || $normalized === '-') {
+            return 0.0;
+        }
+
+        if (str_contains($normalized, ',')) {
+            $normalized = str_replace('.', '', $normalized);
             $normalized = str_replace(',', '.', $normalized);
             return (float) $normalized;
         }
 
-        return (float) $raw;
+        if (substr_count($normalized, '.') > 1) {
+            $lastDot = strrpos($normalized, '.');
+            if ($lastDot !== false) {
+                $intPart = str_replace('.', '', substr($normalized, 0, $lastDot));
+                $decPart = substr($normalized, $lastDot + 1);
+                $normalized = $intPart . '.' . $decPart;
+            }
+        }
+
+        return (float) $normalized;
     }
 }
