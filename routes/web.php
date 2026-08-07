@@ -42,6 +42,15 @@ $router->post('/movimentacoes/{id}/reverter',       'MovementController@revert')
 $router->post('/movimentacoes/dividas-parceladas/registrar', 'MovementController@storeDebtPayment');
 
 // ----------------------------------------------------------------
+// Simple input/output module (independent)
+// ----------------------------------------------------------------
+$router->get('/modulo-simples',                 'SimpleEntryController@index');
+$router->post('/modulo-simples',                'SimpleEntryController@store');
+$router->post('/modulo-simples/{id}',           'SimpleEntryController@update');
+$router->post('/modulo-simples/{id}/excluir',   'SimpleEntryController@destroy');
+$router->get('/modulo-simples/exportar/csv',    'SimpleEntryController@exportCsv');
+
+// ----------------------------------------------------------------
 // Credit cards
 // ----------------------------------------------------------------
 $router->get('/cartoes',                        'CardController@index');

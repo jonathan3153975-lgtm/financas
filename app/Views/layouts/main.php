@@ -67,6 +67,10 @@
                 <i class="fa-solid fa-arrow-right-arrow-left nav-icon"></i>
                 <span>Movimentações</span>
             </a>
+            <a href="<?= $basePath ?>/modulo-simples" class="nav-item <?= $isActive('/modulo-simples') ? 'active' : '' ?>">
+                <i class="fa-solid fa-list-check nav-icon"></i>
+                <span>Módulo Simples</span>
+            </a>
             <a href="<?= $basePath ?>/movimentacoes/fixas" class="nav-item <?= str_starts_with($currentUri, $basePath . '/movimentacoes/fixas') ? 'active' : '' ?>">
                 <i class="fa-solid fa-repeat nav-icon"></i>
                 <span>Fixas / Recorrentes</span>
