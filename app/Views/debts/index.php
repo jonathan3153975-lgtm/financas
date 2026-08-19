@@ -176,7 +176,7 @@ $deltaPaid = $paidCurrent - $paidPrevious;
     <div class="card debt-chart-card">
         <div class="card-header">
             <h3 class="card-title">Demonstrativo de Redução</h3>
-            <span class="badge badge-info">Bruta: <?= fmtBrlDebt((float) ($series['grossReduction'] ?? 0)) ?></span>
+            <span class="badge badge-info">Projeção total: <?= fmtBrlDebt((float) ($series['grossReduction'] ?? 0)) ?></span>
         </div>
         <div class="card-body">
             <?php if (!empty($motivation)): ?>
@@ -375,27 +375,36 @@ $deltaPaid = $paidCurrent - $paidPrevious;
     const labels = <?= json_encode($series['labels'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
     const totals = <?= json_encode($series['totals'] ?? []) ?>;
     const paidCumulative = <?= json_encode($series['paidCumulative'] ?? []) ?>;
+    const currentIndex = <?= json_encode($series['currentIndex'] ?? 0) ?>;
 
     const ctx = document.getElementById('debtReductionChart');
     if (ctx && Array.isArray(labels) && labels.length > 0 && typeof Chart !== 'undefined') {
+        const isFutureSegment = (segCtx) => segCtx.p0DataIndex >= currentIndex;
+
         new Chart(ctx, {
             type: 'line',
             data: {
                 labels,
                 datasets: [
                     {
-                        label: 'Saldo devedor atual',
+                        label: 'Saldo devedor (real / projetado)',
                         data: totals,
                         borderColor: '#0f766e',
                         backgroundColor: 'rgba(15,118,110,.14)',
                         borderWidth: 3,
-                        pointRadius: 3,
-                        pointHoverRadius: 5,
+                        pointRadius: (c) => c.dataIndex === currentIndex ? 6 : 3,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: (c) => c.dataIndex >= currentIndex ? '#ffffff' : '#0f766e',
+                        pointBorderColor: '#0f766e',
                         fill: true,
-                        tension: 0.3
+                        tension: 0.3,
+                        segment: {
+                            borderDash: (c) => isFutureSegment(c) ? [6, 4] : undefined,
+                            backgroundColor: (c) => isFutureSegment(c) ? 'rgba(15,118,110,.05)' : undefined
+                        }
                     },
                     {
-                        label: 'Total pago acumulado',
+                        label: 'Total pago (real / previsto)',
                         data: paidCumulative,
                         borderColor: '#f59e0b',
                         backgroundColor: 'rgba(245,158,11,.08)',

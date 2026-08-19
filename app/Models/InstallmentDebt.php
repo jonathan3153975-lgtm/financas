@@ -71,19 +71,25 @@ class InstallmentDebt extends Model
     }
 
     /**
-     * @return array{labels: array<int,string>, payments: array<int,float>, totals: array<int,float>, paidCumulative: array<int,float>, grossReduction: float}
+     * Série para o gráfico de redução: meses passados (histórico real) seguidos
+     * do mês atual e meses futuros (projeção com base nas parcelas em aberto).
+     *
+     * @return array{labels: array<int,string>, payments: array<int,float>, totals: array<int,float>, paidCumulative: array<int,float>, grossReduction: float, currentIndex: int}
      */
-    public function getReductionSeries(int $userId, int $months = 8): array
+    public function getReductionSeries(int $userId, int $monthsPast = 3, int $monthsFuture = 9): array
     {
+        $totalMonths = $monthsPast + $monthsFuture;
+        $currentIndex = $monthsPast;
+
         $labels = [];
         $keys   = [];
         $paymentsByKey = [];
         $newDebtByKey  = [];
 
         $start = new \DateTimeImmutable('first day of this month');
-        $start = $start->modify('-' . max(0, $months - 1) . ' months');
+        $start = $start->modify('-' . $monthsPast . ' months');
 
-        for ($i = 0; $i < $months; $i++) {
+        for ($i = 0; $i < $totalMonths; $i++) {
             $d = $start->modify('+' . $i . ' months');
             $key = $d->format('Y-m');
             $keys[] = $key;
@@ -92,6 +98,7 @@ class InstallmentDebt extends Model
             $newDebtByKey[$key] = 0.0;
         }
 
+        // histórico real (pagamentos já lançados) para os meses passados
         $rows = $this->db->fetchAll(
             "SELECT DATE_FORMAT(data_competencia, '%Y-%m') AS ym, COALESCE(SUM(valor), 0) AS total
              FROM movimentacoes
@@ -100,7 +107,7 @@ class InstallmentDebt extends Model
                AND observacao LIKE '[DIVIDA_ID:%'
                AND data_competencia >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), '%Y-%m-01')
              GROUP BY ym",
-            [$userId, $months + 1]
+            [$userId, $monthsPast + 1]
         );
 
         foreach ($rows as $row) {
@@ -116,7 +123,7 @@ class InstallmentDebt extends Model
              WHERE usuario_id = ?
                AND created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL ? MONTH), '%Y-%m-01')
              GROUP BY ym",
-            [$userId, $months + 1]
+            [$userId, $monthsPast + 1]
         );
 
         foreach ($debts as $row) {
@@ -126,29 +133,47 @@ class InstallmentDebt extends Model
             }
         }
 
-        $payments = [];
-        foreach ($keys as $k) {
-            $payments[] = $paymentsByKey[$k];
+        // projeção futura: valor previsto de parcelas por mês, a partir das dívidas em aberto
+        $forecast = $this->getForecastMatrix($userId, $monthsFuture);
+        $forecastByKey = [];
+        foreach ($forecast['labels'] as $idx => $label) {
+            [$m, $y] = explode('/', $label);
+            $forecastByKey[$y . '-' . $m] = (float) ($forecast['totals'][$idx] ?? 0.0);
         }
 
-        $totals = array_fill(0, count($keys), 0.0);
-        $running = $this->getTotalOutstanding($userId);
+        $currentOutstanding = $this->getTotalOutstanding($userId);
+        $totals = array_fill(0, $totalMonths, 0.0);
 
-        for ($i = count($keys) - 1; $i >= 0; $i--) {
-            $key = $keys[$i];
+        // reconstrói o passado desfazendo pagamentos/novas dívidas a partir do saldo atual
+        $running = $currentOutstanding;
+        for ($i = $currentIndex; $i >= 0; $i--) {
             $totals[$i] = round($running, 2);
-            $running += $paymentsByKey[$key];
-            $running -= $newDebtByKey[$key];
+            if ($i > 0) {
+                $key = $keys[$i];
+                $running += $paymentsByKey[$key] ?? 0.0;
+                $running -= $newDebtByKey[$key] ?? 0.0;
+            }
         }
 
-        $grossReduction = max(0, $totals[0] - $totals[count($totals) - 1]);
+        // projeta o futuro subtraindo os pagamentos previstos das parcelas em aberto
+        $running = $currentOutstanding;
+        for ($i = $currentIndex + 1; $i < $totalMonths; $i++) {
+            $key = $keys[$i];
+            $running = max(0.0, $running - ($forecastByKey[$key] ?? 0.0));
+            $totals[$i] = round($running, 2);
+        }
 
+        $payments = [];
         $paidCumulative = [];
         $runningPaid = 0.0;
-        foreach ($keys as $k) {
-            $runningPaid += $paymentsByKey[$k];
+        foreach ($keys as $idx => $k) {
+            $valor = $idx <= $currentIndex ? ($paymentsByKey[$k] ?? 0.0) : ($forecastByKey[$k] ?? 0.0);
+            $payments[] = $valor;
+            $runningPaid += $valor;
             $paidCumulative[] = round($runningPaid, 2);
         }
+
+        $grossReduction = max(0, $totals[0] - $totals[$totalMonths - 1]);
 
         return [
             'labels' => $labels,
@@ -156,6 +181,7 @@ class InstallmentDebt extends Model
             'totals' => $totals,
             'paidCumulative' => $paidCumulative,
             'grossReduction' => round($grossReduction, 2),
+            'currentIndex' => $currentIndex,
         ];
     }
 

@@ -42,16 +42,17 @@ class InstallmentDebtController extends Controller
         }
         $paidPrevious = $this->model->getMonthlyPaid($userId, $prevMes, $prevAno);
 
-        $series   = $this->model->getReductionSeries($userId, 8);
+        $series   = $this->model->getReductionSeries($userId, 3, 9);
         $savings  = $this->model->getTotalSavings($userId);
         $forecast = $this->model->getForecastMatrix($userId, 12);
 
         $labels = $series['labels'] ?? [];
         $totals = $series['totals'] ?? [];
-        $periodMonths = max(1, count($labels));
+        $currentIndex = (int) ($series['currentIndex'] ?? 0);
+        $periodMonths = max(1, $currentIndex);
 
         $startOutstanding = (float) ($totals[0] ?? 0);
-        $currentOutstanding = (float) ($totals[count($totals) - 1] ?? $totalOutstanding);
+        $currentOutstanding = (float) ($totals[$currentIndex] ?? $totalOutstanding);
         $reductionAmount = max(0, $startOutstanding - $currentOutstanding);
         $reductionPercent = $startOutstanding > 0
             ? round(($reductionAmount / $startOutstanding) * 100, 1)
