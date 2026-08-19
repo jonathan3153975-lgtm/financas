@@ -373,7 +373,6 @@ img { max-width: 100%; display: block; }
 .page-content {
     padding: 24px;
     flex: 1;
-    max-width: 1400px;
     width: 100%;
 }
 
