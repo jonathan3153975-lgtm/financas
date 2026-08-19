@@ -185,6 +185,67 @@ class InstallmentDebt extends Model
         );
     }
 
+    /**
+     * Demonstrativo mês a mês das parcelas em aberto, por dívida, com total geral por mês.
+     * O horizonte é limitado a $months, mas termina antes se todas as dívidas já
+     * estiverem quitadas dentro do período.
+     *
+     * @return array{labels: array<int,string>, rows: array<int,array{descricao:string, values: array<int,float>, total: float}>, totals: array<int,float>}
+     */
+    public function getForecastMatrix(int $userId, int $months = 12): array
+    {
+        $debts = $this->db->fetchAll(
+            "SELECT id, descricao, valor_parcela, total_parcelas, parcelas_pagas
+             FROM `{$this->table}`
+             WHERE usuario_id = ? AND ativo = 1 AND parcelas_pagas < total_parcelas
+             ORDER BY descricao",
+            [$userId]
+        );
+
+        if (empty($debts)) {
+            return ['labels' => [], 'rows' => [], 'totals' => []];
+        }
+
+        $maxAbertas = 0;
+        foreach ($debts as $debt) {
+            $abertas = (int) $debt['total_parcelas'] - (int) $debt['parcelas_pagas'];
+            $maxAbertas = max($maxAbertas, $abertas);
+        }
+        $totalMonths = min($months, max(1, $maxAbertas));
+
+        $start = new \DateTimeImmutable('first day of this month');
+        $labels = [];
+        for ($i = 0; $i < $totalMonths; $i++) {
+            $labels[] = $start->modify("+{$i} months")->format('m/Y');
+        }
+
+        $rows = [];
+        $totals = array_fill(0, $totalMonths, 0.0);
+
+        foreach ($debts as $debt) {
+            $abertas = (int) $debt['total_parcelas'] - (int) $debt['parcelas_pagas'];
+            $valor   = (float) $debt['valor_parcela'];
+
+            $values = [];
+            for ($i = 0; $i < $totalMonths; $i++) {
+                $values[$i] = $i < $abertas ? round($valor, 2) : 0.0;
+                $totals[$i] += $values[$i];
+            }
+
+            $rows[] = [
+                'descricao' => (string) $debt['descricao'],
+                'values'    => $values,
+                'total'     => round(array_sum($values), 2),
+            ];
+        }
+
+        return [
+            'labels' => $labels,
+            'rows'   => $rows,
+            'totals' => array_map(fn ($v) => round($v, 2), $totals),
+        ];
+    }
+
     public function createDebt(int $userId, array $data): int
     {
         $saldoInicial = (float) $data['valor_parcela'] * ((int) $data['total_parcelas'] - (int) $data['parcelas_pagas']);

@@ -190,6 +190,57 @@ $deltaPaid = $paidCurrent - $paidPrevious;
     </div>
 </div>
 
+<div class="card debt-forecast-card">
+    <div class="card-header">
+        <h3 class="card-title">Demonstrativo de Parcelas Futuras</h3>
+        <?php if (!empty($forecast['labels'])): ?>
+        <span class="badge badge-info"><?= count($forecast['labels']) ?> <?= count($forecast['labels']) === 1 ? 'mês' : 'meses' ?> de previsão</span>
+        <?php endif; ?>
+    </div>
+    <div class="card-body">
+        <?php if (empty($forecast['rows'])): ?>
+        <div class="empty-state py-10">
+            <i class="fa-solid fa-calendar-check"></i>
+            <p>Nenhuma parcela em aberto para projetar.</p>
+        </div>
+        <?php else: ?>
+        <div class="table-responsive">
+            <table class="table debt-forecast-table">
+                <thead>
+                    <tr>
+                        <th>Dívida</th>
+                        <?php foreach ($forecast['labels'] as $label): ?>
+                        <th class="text-right"><?= htmlspecialchars($label) ?></th>
+                        <?php endforeach; ?>
+                        <th class="text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($forecast['rows'] as $row): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($row['descricao']) ?></td>
+                        <?php foreach ($row['values'] as $value): ?>
+                        <td class="text-right"><?= $value > 0 ? fmtBrlDebt((float) $value) : '—' ?></td>
+                        <?php endforeach; ?>
+                        <td class="text-right"><strong><?= fmtBrlDebt((float) $row['total']) ?></strong></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th>Total do mês</th>
+                        <?php foreach ($forecast['totals'] as $total): ?>
+                        <th class="text-right"><?= fmtBrlDebt((float) $total) ?></th>
+                        <?php endforeach; ?>
+                        <th class="text-right"><?= fmtBrlDebt((float) array_sum($forecast['totals'])) ?></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="modal-overlay" id="modalNovaDivida" style="display:none">
     <div class="modal-dialog modal-lg">
         <div class="modal-header">

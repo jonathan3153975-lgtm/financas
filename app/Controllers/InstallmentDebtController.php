@@ -44,6 +44,7 @@ class InstallmentDebtController extends Controller
 
         $series   = $this->model->getReductionSeries($userId, 8);
         $savings  = $this->model->getTotalSavings($userId);
+        $forecast = $this->model->getForecastMatrix($userId, 12);
 
         $labels = $series['labels'] ?? [];
         $totals = $series['totals'] ?? [];
@@ -92,6 +93,7 @@ class InstallmentDebtController extends Controller
             'motivation'       => $motivation,
             'totalEconomia'    => $savings['economia'],
             'totalJuros'       => $savings['juros'],
+            'forecast'         => $forecast,
             'csrf'             => $this->csrfToken(),
             'flash'            => $this->getFlash(),
         ]);
