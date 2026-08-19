@@ -277,6 +277,149 @@ class InstallmentDebt extends Model
         }
     }
 
+    public function updateDebt(int $userId, int $debtId, array $data): bool
+    {
+        $debt = $this->db->fetch(
+            "SELECT id FROM `{$this->table}` WHERE id = ? AND usuario_id = ?",
+            [$debtId, $userId]
+        );
+
+        if ($debt === null) {
+            return false;
+        }
+
+        $totalParcelas = (int) $data['total_parcelas'];
+        $parcelasPagas = (int) $data['parcelas_pagas'];
+        $valorParcela  = (float) $data['valor_parcela'];
+        $saldoDevedor  = round(max(0, $valorParcela * ($totalParcelas - $parcelasPagas)), 2);
+
+        $this->update($debtId, [
+            'descricao'      => (string) $data['descricao'],
+            'valor_parcela'  => $valorParcela,
+            'total_parcelas' => $totalParcelas,
+            'parcelas_pagas' => $parcelasPagas,
+            'dia_vencimento' => (int) ($data['dia_vencimento'] ?? 1),
+            'saldo_devedor'  => $saldoDevedor,
+            'ativo'          => $parcelasPagas < $totalParcelas ? 1 : 0,
+        ]);
+
+        return true;
+    }
+
+    /**
+     * Quita integralmente o saldo devedor da dívida, lançando o valor restante
+     * como uma movimentação de saída já validada.
+     */
+    public function settleDebt(int $userId, int $debtId, string $dataCompetencia): void
+    {
+        $db = Database::getInstance();
+        $db->beginTransaction();
+
+        try {
+            $debt = $db->fetch(
+                "SELECT * FROM `{$this->table}` WHERE id = ? AND usuario_id = ? FOR UPDATE",
+                [$debtId, $userId]
+            );
+
+            if ($debt === null) {
+                throw new RuntimeException('Dívida não encontrada.');
+            }
+
+            $totalParcelas = (int) $debt['total_parcelas'];
+            $parcelasPagas = (int) $debt['parcelas_pagas'];
+            $saldoDevedor  = (float) $debt['saldo_devedor'];
+
+            if ($parcelasPagas >= $totalParcelas || $saldoDevedor <= 0) {
+                throw new RuntimeException('Esta dívida já está quitada.');
+            }
+
+            $catId = $this->findOrCreateDebtCategoryId();
+            $tagPattern = '[DIVIDA_ID:' . $debtId . ']%';
+
+            $db->execute(
+                "INSERT INTO movimentacoes
+                    (usuario_id, descricao, tipo, modo, categoria_id, subcategoria_id, valor, data_competencia, data_vencimento,
+                     parcela_atual, total_parcelas, validado, observacao)
+                 VALUES (?, ?, 'saida', 'parcelamento', ?, NULL, ?, ?, ?, ?, ?, 1, ?)",
+                [
+                    $userId,
+                    'Quitação dívida: ' . $debt['descricao'],
+                    $catId,
+                    $saldoDevedor,
+                    $dataCompetencia,
+                    $dataCompetencia,
+                    $totalParcelas,
+                    $totalParcelas,
+                    '[DIVIDA_ID:' . $debtId . '][QUITACAO] Quitação integral do saldo devedor',
+                ]
+            );
+
+            // remove previsões pendentes futuras, evitando duplicidade após a quitação
+            $db->execute(
+                "DELETE FROM movimentacoes WHERE usuario_id = ? AND observacao LIKE ? AND validado = 0",
+                [$userId, $tagPattern]
+            );
+
+            $db->execute(
+                "UPDATE `{$this->table}` SET parcelas_pagas = ?, saldo_devedor = 0, ativo = 0
+                 WHERE id = ? AND usuario_id = ?",
+                [$totalParcelas, $debtId, $userId]
+            );
+
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollback();
+            throw $e;
+        }
+    }
+
+    /**
+     * Remove a dívida e as movimentações vinculadas. Parcelas pendentes (não validadas)
+     * são sempre removidas; parcelas já pagas só são removidas se $excluirPagas = true.
+     */
+    public function deleteDebt(int $userId, int $debtId, bool $excluirPagas): bool
+    {
+        $db = Database::getInstance();
+        $db->beginTransaction();
+
+        try {
+            $debt = $db->fetch(
+                "SELECT id FROM `{$this->table}` WHERE id = ? AND usuario_id = ? FOR UPDATE",
+                [$debtId, $userId]
+            );
+
+            if ($debt === null) {
+                $db->rollback();
+                return false;
+            }
+
+            $tagPattern = '[DIVIDA_ID:' . $debtId . ']%';
+
+            if ($excluirPagas) {
+                $db->execute(
+                    "DELETE FROM movimentacoes WHERE usuario_id = ? AND observacao LIKE ?",
+                    [$userId, $tagPattern]
+                );
+            } else {
+                $db->execute(
+                    "DELETE FROM movimentacoes WHERE usuario_id = ? AND observacao LIKE ? AND validado = 0",
+                    [$userId, $tagPattern]
+                );
+            }
+
+            $db->execute(
+                "DELETE FROM `{$this->table}` WHERE id = ? AND usuario_id = ?",
+                [$debtId, $userId]
+            );
+
+            $db->commit();
+            return true;
+        } catch (\Throwable $e) {
+            $db->rollback();
+            throw $e;
+        }
+    }
+
     public function findOrCreateDebtCategoryId(): ?int
     {
         $cat = $this->db->fetch(

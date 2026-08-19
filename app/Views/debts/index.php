@@ -143,6 +143,29 @@ $deltaPaid = $paidCurrent - $paidPrevious;
                             <div class="debt-item-progress">(<?= (int) $debt['parcelas_pagas'] ?>/<?= (int) $debt['total_parcelas'] ?>)</div>
                         </div>
                     </div>
+                    <div class="debt-item-actions" style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px">
+                        <?php if ((int) $debt['ativo'] === 1 && (int) $debt['parcelas_pagas'] < (int) $debt['total_parcelas']): ?>
+                        <button type="button" class="btn btn-ghost btn-sm text-success" title="Quitar dívida"
+                                onclick="settleDebt(<?= (int) $debt['id'] ?>, '<?= htmlspecialchars((string) $csrf) ?>')">
+                            <i class="fa-solid fa-hand-holding-dollar"></i> Quitar
+                        </button>
+                        <?php endif; ?>
+                        <button type="button" class="btn btn-ghost btn-sm" title="Editar"
+                                onclick='openEditDebtModal(<?= json_encode([
+                                    "id"             => (int) $debt["id"],
+                                    "descricao"      => (string) $debt["descricao"],
+                                    "valor_parcela"  => (float) $debt["valor_parcela"],
+                                    "total_parcelas" => (int) $debt["total_parcelas"],
+                                    "parcelas_pagas" => (int) $debt["parcelas_pagas"],
+                                    "dia_vencimento" => (int) $debt["dia_vencimento"],
+                                ], JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
+                            <i class="fa-solid fa-pencil"></i> Editar
+                        </button>
+                        <button type="button" class="btn btn-ghost btn-sm text-danger" title="Excluir"
+                                onclick="deleteDebt(<?= (int) $debt['id'] ?>, '<?= htmlspecialchars((string) $csrf) ?>')">
+                            <i class="fa-solid fa-trash"></i> Excluir
+                        </button>
+                    </div>
                 </article>
                 <?php endforeach; ?>
             </div>
@@ -246,6 +269,51 @@ $deltaPaid = $paidCurrent - $paidPrevious;
             <div class="modal-footer">
                 <button type="button" class="btn btn-ghost" onclick="closeModal('modalNovaDivida')">Cancelar</button>
                 <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Salvar e lançar previsões</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modalEditarDivida" style="display:none">
+    <div class="modal-dialog">
+        <div class="modal-header">
+            <h3 class="modal-title"><i class="fa-solid fa-pencil"></i> Editar Dívida Parcelada</h3>
+            <button class="modal-close" onclick="closeModal('modalEditarDivida')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form method="POST" id="debtEditForm">
+            <div class="modal-body">
+                <input type="hidden" name="_csrf" value="<?= htmlspecialchars((string) $csrf) ?>">
+
+                <div class="form-group">
+                    <label class="form-label">Descrição</label>
+                    <input type="text" class="form-control" name="descricao" id="editDescricao" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label class="form-label">Valor da parcela</label>
+                        <input type="text" class="form-control currency-input" name="valor_parcela" id="editValorParcela" required>
+                    </div>
+                    <div class="form-group col-6">
+                        <label class="form-label">Total de parcelas</label>
+                        <input type="number" class="form-control" name="total_parcelas" id="editTotalParcelas" min="1" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label class="form-label">Parcelas já pagas</label>
+                        <input type="number" class="form-control" name="parcelas_pagas" id="editParcelasPagas" min="0" required>
+                    </div>
+                    <div class="form-group col-6">
+                        <label class="form-label">Dia vencimento</label>
+                        <input type="number" class="form-control" name="dia_vencimento" id="editDiaVencimento" min="1" max="28" required>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('modalEditarDivida')">Cancelar</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Salvar alterações</button>
             </div>
         </form>
     </div>
@@ -369,4 +437,68 @@ $deltaPaid = $paidCurrent - $paidPrevious;
 
     refreshAll();
 })();
+
+function openEditDebtModal(debt) {
+    const form = document.getElementById('debtEditForm');
+    form.action = `<?= $basePath ?>/dividas-parceladas/${debt.id}`;
+    document.getElementById('editDescricao').value = debt.descricao;
+    document.getElementById('editValorParcela').value = debt.valor_parcela.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('editTotalParcelas').value = debt.total_parcelas;
+    document.getElementById('editParcelasPagas').value = debt.parcelas_pagas;
+    document.getElementById('editDiaVencimento').value = debt.dia_vencimento;
+    openModal('modalEditarDivida');
+}
+
+async function settleDebt(id, csrf) {
+    const result = await Swal.fire({
+        title: 'Quitar esta dívida?',
+        text: 'O saldo devedor restante será lançado como uma movimentação de saída já validada, e a dívida será encerrada.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, quitar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#0f766e',
+    });
+    if (!result.isConfirmed) return;
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `<?= $basePath ?>/dividas-parceladas/${id}/quitar`;
+    form.innerHTML = `<input type="hidden" name="_csrf" value="${csrf}">`;
+    document.body.appendChild(form);
+    form.submit();
+}
+
+async function deleteDebt(id, csrf) {
+    const first = await Swal.fire({
+        title: 'Excluir esta dívida?',
+        text: 'As parcelas pendentes lançadas em Movimentações também serão removidas.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Continuar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#ef4444',
+    });
+    if (!first.isConfirmed) return;
+
+    const second = await Swal.fire({
+        title: 'Excluir também as parcelas já pagas?',
+        text: 'Isso removerá do histórico de Movimentações as parcelas desta dívida marcadas como pagas.',
+        icon: 'warning',
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'Sim, excluir também',
+        denyButtonText: 'Não, manter as pagas',
+        cancelButtonText: 'Cancelar exclusão',
+        confirmButtonColor: '#ef4444',
+    });
+    if (!second.isConfirmed && !second.isDenied) return;
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `<?= $basePath ?>/dividas-parceladas/${id}/excluir`;
+    form.innerHTML = `<input type="hidden" name="_csrf" value="${csrf}"><input type="hidden" name="excluir_pagas" value="${second.isConfirmed ? '1' : '0'}">`;
+    document.body.appendChild(form);
+    form.submit();
+}
 </script>

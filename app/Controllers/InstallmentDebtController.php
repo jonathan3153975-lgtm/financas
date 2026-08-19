@@ -174,6 +174,83 @@ class InstallmentDebtController extends Controller
         $this->redirect('/dividas-parceladas?mes=' . $mes . '&ano=' . $ano);
     }
 
+    public function update(string $id): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $userId = (int) $this->getUserId();
+        $debtId = (int) $id;
+
+        $descricao     = trim($_POST['descricao'] ?? '');
+        $valorParcela  = $this->parseMoney($_POST['valor_parcela'] ?? '0');
+        $totalParcelas = (int) ($_POST['total_parcelas'] ?? 0);
+        $parcelasPagas = (int) ($_POST['parcelas_pagas'] ?? 0);
+        $diaVencimento = max(1, min(28, (int) ($_POST['dia_vencimento'] ?? 1)));
+
+        if ($descricao === '' || $valorParcela <= 0 || $totalParcelas <= 0) {
+            $this->setFlash('error', 'Preencha descrição, valor da parcela e total de parcelas.');
+            $this->redirect('/dividas-parceladas');
+            return;
+        }
+
+        if ($parcelasPagas < 0 || $parcelasPagas > $totalParcelas) {
+            $this->setFlash('error', 'A quantidade de parcelas pagas é inválida.');
+            $this->redirect('/dividas-parceladas');
+            return;
+        }
+
+        $updated = $this->model->updateDebt($userId, $debtId, [
+            'descricao'      => $descricao,
+            'valor_parcela'  => $valorParcela,
+            'total_parcelas' => $totalParcelas,
+            'parcelas_pagas' => $parcelasPagas,
+            'dia_vencimento' => $diaVencimento,
+        ]);
+
+        $this->setFlash(
+            $updated ? 'success' : 'error',
+            $updated ? 'Dívida atualizada com sucesso!' : 'Dívida não encontrada.'
+        );
+        $this->redirect('/dividas-parceladas');
+    }
+
+    public function settle(string $id): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $userId = (int) $this->getUserId();
+        $debtId = (int) $id;
+
+        try {
+            $this->model->settleDebt($userId, $debtId, date('Y-m-d'));
+            $this->setFlash('success', 'Dívida quitada com sucesso!');
+        } catch (\Throwable $e) {
+            $this->setFlash('error', $e->getMessage());
+        }
+
+        $this->redirect('/dividas-parceladas');
+    }
+
+    public function destroy(string $id): void
+    {
+        $this->requireAuth();
+        $this->verifyCsrf();
+
+        $userId = (int) $this->getUserId();
+        $debtId = (int) $id;
+        $excluirPagas = ($_POST['excluir_pagas'] ?? '0') === '1';
+
+        $deleted = $this->model->deleteDebt($userId, $debtId, $excluirPagas);
+
+        $this->setFlash(
+            $deleted ? 'success' : 'error',
+            $deleted ? 'Dívida excluída com sucesso!' : 'Dívida não encontrada.'
+        );
+        $this->redirect('/dividas-parceladas');
+    }
+
     private function parseMoney(string $value): float
     {
         $normalized = str_replace(['R$', ' '], '', trim($value));

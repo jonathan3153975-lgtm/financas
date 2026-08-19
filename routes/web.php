@@ -78,6 +78,9 @@ $router->post('/folha-pagamento/{id}/excluir','PayrollController@destroy');
 $router->get('/dividas-parceladas',             'InstallmentDebtController@index');
 $router->post('/dividas-parceladas',            'InstallmentDebtController@store');
 $router->post('/dividas-parceladas/pagamentos', 'InstallmentDebtController@registerPayment');
+$router->post('/dividas-parceladas/{id}',           'InstallmentDebtController@update');
+$router->post('/dividas-parceladas/{id}/quitar',    'InstallmentDebtController@settle');
+$router->post('/dividas-parceladas/{id}/excluir',   'InstallmentDebtController@destroy');
 
 // ----------------------------------------------------------------
 // Reports
