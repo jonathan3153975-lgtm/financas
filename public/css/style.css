@@ -625,6 +625,11 @@ img { max-width: 100%; display: block; }
 .row-pending td { background: #fffbeb !important; }
 .row-inactive td { opacity: 0.55; }
 
+.debt-forecast-table th,
+.debt-forecast-table td { font-size: 12px; padding: 8px 12px; }
+
+.debt-forecast-table tbody tr:hover td { background: #fef9c3; }
+
 .text-right  { text-align: right; }
 .text-center { text-align: center; }
 .text-left   { text-align: left; }
