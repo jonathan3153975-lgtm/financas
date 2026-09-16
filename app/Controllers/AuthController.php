@@ -64,10 +64,11 @@ class AuthController extends Controller
         // Store user in session
         $this->session->set('user_id', (int) $user['id']);
         $this->session->set('user', [
-            'id'    => $user['id'],
-            'nome'  => $user['nome'],
-            'email' => $user['email'],
-            'cpf'   => $user['cpf'],
+            'id'                  => $user['id'],
+            'nome'                => $user['nome'],
+            'email'               => $user['email'],
+            'cpf'                 => $user['cpf'],
+            'apostas_autorizado'  => (bool) ($user['apostas_autorizado'] ?? false),
         ]);
         $this->session->regenerateCsrf();
 

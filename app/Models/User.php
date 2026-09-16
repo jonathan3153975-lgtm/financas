@@ -155,4 +155,14 @@ class User extends Model
             [$hash, $id]
         );
     }
+
+    // ----------------------------------------------------------------
+    // Módulo de Apostas
+    // ----------------------------------------------------------------
+
+    public function isBetsAuthorized(int $id): bool
+    {
+        $user = $this->find($id);
+        return $user !== null && (bool) $user['apostas_autorizado'];
+    }
 }

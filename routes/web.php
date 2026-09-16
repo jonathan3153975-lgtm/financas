@@ -99,6 +99,22 @@ $router->post('/perfil',         'UserController@updateProfile');
 $router->post('/perfil/senha',   'UserController@changePassword');
 
 // ----------------------------------------------------------------
+// Gerenciamento de Apostas (acesso restrito por autorização ou link público)
+// ----------------------------------------------------------------
+$router->get('/apostas',                     'BetController@index');
+$router->get('/apostas/dia/{date}',          'BetController@dayRecords');
+$router->get('/apostas/extrato',             'BetController@statement');
+$router->post('/apostas/simples',            'BetController@storeSimple');
+$router->post('/apostas/multipla',           'BetController@storeMultiple');
+$router->post('/apostas/{id}/finalizar',     'BetController@finalize');
+$router->post('/apostas/{id}/excluir',       'BetController@destroy');
+$router->post('/apostas/banca',              'BetController@bankMovementStore');
+$router->post('/apostas/link/gerar',         'BetController@generateShareLink');
+$router->post('/apostas/link/revogar',       'BetController@revokeShareLink');
+$router->get('/apostas/compartilhado/{token}',              'BetController@publicView',        false);
+$router->get('/apostas/compartilhado/{token}/dia/{date}',   'BetController@publicDayRecords',   false);
+
+// ----------------------------------------------------------------
 // API: subcategorias (AJAX)
 // ----------------------------------------------------------------
 $router->get('/api/subcategorias/{categoriaId}', function (string $categoriaId) {

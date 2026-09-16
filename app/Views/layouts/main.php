@@ -97,6 +97,17 @@
             </a>
         </div>
 
+        <?php $usrNav = $this->getUser(); ?>
+        <?php if (!empty($usrNav['apostas_autorizado'])): ?>
+        <div class="nav-group">
+            <span class="nav-group-label">Extra</span>
+            <a href="<?= $basePath ?>/apostas" class="nav-item <?= $isActive('/apostas') ? 'active' : '' ?>">
+                <i class="fa-solid fa-dice nav-icon"></i>
+                <span>Gerenciamento de Apostas</span>
+            </a>
+        </div>
+        <?php endif; ?>
+
         <div class="nav-group">
             <span class="nav-group-label">Conta</span>
             <a href="<?= $basePath ?>/perfil" class="nav-item <?= $isActive('/perfil') ? 'active' : '' ?>">
