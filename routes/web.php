@@ -109,6 +109,8 @@ $router->post('/apostas/multipla',           'BetController@storeMultiple');
 $router->post('/apostas/{id}/finalizar',     'BetController@finalize');
 $router->post('/apostas/{id}/excluir',       'BetController@destroy');
 $router->post('/apostas/banca',              'BetController@bankMovementStore');
+$router->post('/apostas/prospectos',                'BetController@prospectStore');
+$router->post('/apostas/prospectos/{id}/excluir',   'BetController@prospectDestroy');
 $router->post('/apostas/link/gerar',         'BetController@generateShareLink');
 $router->post('/apostas/link/revogar',       'BetController@revokeShareLink');
 $router->get('/apostas/compartilhado/{token}',              'BetController@publicView',        false);

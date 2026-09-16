@@ -543,13 +543,21 @@ CREATE TABLE IF NOT EXISTS `apostas_categorias` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `apostas_categorias` (`nome`, `icone`) VALUES
-('Futebol',      'fa-futbol'),
-('Tênis',        'fa-table-tennis-paddle-ball'),
-('Basquete',     'fa-basketball'),
-('E-sports',     'fa-computer'),
-('Vôlei',        'fa-volleyball'),
-('MMA / UFC',    'fa-hand-fist'),
-('Outros',       'fa-dice');
+('Futebol',       'fa-futbol'),
+('Tênis',         'fa-table-tennis-paddle-ball'),
+('Tênis de Mesa', 'fa-table-tennis-paddle-ball'),
+('Basquete',      'fa-basketball'),
+('E-sports',      'fa-computer'),
+('Vôlei',         'fa-volleyball'),
+('Vôlei de Praia', 'fa-volleyball'),
+('MMA / UFC',     'fa-hand-fist'),
+('Boxe',          'fa-hand-back-fist'),
+('Fórmula 1',     'fa-flag-checkered'),
+('Rugby',         'fa-football'),
+('Handebol',      'fa-hand-dots'),
+('Golfe',         'fa-golf-ball-tee'),
+('Sinuca',        'fa-circle-dot'),
+('Outros',        'fa-dice');
 
 -- ============================================================
 -- TABLE: apostas_banca_movimentos (entradas / saques da banca)
@@ -625,6 +633,28 @@ CREATE TABLE IF NOT EXISTS `apostas_links_publicos` (
     UNIQUE KEY `uq_alp_token` (`token`),
     KEY `fk_alp_usuario` (`usuario_id`),
     CONSTRAINT `fk_alp_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- TABLE: apostas_prospectos (levantamento de possíveis entradas)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `apostas_prospectos` (
+    `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `usuario_id`  INT UNSIGNED NOT NULL,
+    `descricao`   VARCHAR(255) NOT NULL,
+    `categoria_id` INT UNSIGNED NULL,
+    `data_hora`   DATETIME NOT NULL,
+    `odd`         DECIMAL(10,3) NOT NULL DEFAULT 1.000,
+    `aposta_id`   INT UNSIGNED NULL,
+    `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `fk_apr_usuario` (`usuario_id`),
+    KEY `fk_apr_categoria` (`categoria_id`),
+    KEY `fk_apr_aposta` (`aposta_id`),
+    KEY `idx_apr_data` (`data_hora`),
+    CONSTRAINT `fk_apr_usuario`   FOREIGN KEY (`usuario_id`)   REFERENCES `usuarios`          (`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_apr_categoria` FOREIGN KEY (`categoria_id`) REFERENCES `apostas_categorias` (`id`),
+    CONSTRAINT `fk_apr_aposta`    FOREIGN KEY (`aposta_id`)    REFERENCES `apostas`            (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================

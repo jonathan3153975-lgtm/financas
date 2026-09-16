@@ -8,6 +8,7 @@ use App\Models\BetSelection;
 use App\Models\BetCategory;
 use App\Models\BetBankMovement;
 use App\Models\BetShareLink;
+use App\Models\BetProspect;
 use App\Models\User;
 
 /**
@@ -22,14 +23,16 @@ class BetController extends Controller
     private BetCategory $catModel;
     private BetBankMovement $bankModel;
     private BetShareLink $linkModel;
+    private BetProspect $prospectModel;
 
     public function __construct()
     {
         parent::__construct();
-        $this->model     = new Bet();
-        $this->catModel  = new BetCategory();
-        $this->bankModel = new BetBankMovement();
-        $this->linkModel = new BetShareLink();
+        $this->model         = new Bet();
+        $this->catModel      = new BetCategory();
+        $this->bankModel     = new BetBankMovement();
+        $this->linkModel     = new BetShareLink();
+        $this->prospectModel = new BetProspect();
     }
 
     // ----------------------------------------------------------------
@@ -65,21 +68,32 @@ class BetController extends Controller
 
         $kpis   = $this->model->getKpis($userId, $mes, $ano);
         $daily  = $this->model->getDailyTotals($userId, $mes, $ano);
-        $saldoBanca = $this->bankModel->getBalance($userId);
+        // Saldo real = entradas/saques manuais + resultado líquido histórico das apostas
+        $saldoBanca = $this->bankModel->getBalance($userId) + $this->model->getNetResultAllTime($userId);
         $categorias = $this->catModel->findActive();
         $shareLink  = $this->linkModel->findActiveForUser($userId);
 
+        $prospectDe  = trim((string) ($_GET['prospect_de']  ?? ''));
+        $prospectAte = trim((string) ($_GET['prospect_ate'] ?? ''));
+        $prospects   = $this->prospectModel->findByUser($userId, $prospectDe ?: null, $prospectAte ?: null);
+
+        $monthlyBankTotals = $this->bankModel->getMonthlyTotals($userId, $mes, $ano);
+
         $this->view('bets/index', [
-            'mes'         => $mes,
-            'ano'         => $ano,
-            'kpis'        => $kpis,
-            'daily'       => $daily,
-            'saldoBanca'  => $saldoBanca,
-            'categorias'  => $categorias,
-            'shareLink'   => $shareLink,
-            'csrf'        => $this->csrfToken(),
-            'flash'       => $this->getFlash(),
-        ]);
+            'mes'               => $mes,
+            'ano'               => $ano,
+            'kpis'              => $kpis,
+            'daily'             => $daily,
+            'saldoBanca'        => $saldoBanca,
+            'categorias'        => $categorias,
+            'shareLink'         => $shareLink,
+            'prospects'         => $prospects,
+            'prospectDe'        => $prospectDe,
+            'prospectAte'       => $prospectAte,
+            'monthlyBankTotals' => $monthlyBankTotals,
+            'csrf'              => $this->csrfToken(),
+            'flash'             => $this->getFlash(),
+        ], 'none');
     }
 
     // ----------------------------------------------------------------
@@ -163,7 +177,7 @@ class BetController extends Controller
             return;
         }
 
-        $this->model->createSimple([
+        $betId = $this->model->createSimple([
             'usuario_id'       => $userId,
             'descricao'        => $descricao,
             'categoria_id'     => $categoriaId,
@@ -175,6 +189,8 @@ class BetController extends Controller
             'data_resultado'   => $status !== 'pendente' ? date('Y-m-d') : null,
             'observacao'       => $observacao ?: null,
         ]);
+
+        $this->prospectModel->linkToBet($this->parseIdList((string) ($_POST['prospect_ids'] ?? '')), $betId, $userId);
 
         $this->setFlash('success', 'Aposta registrada com sucesso!');
         $this->redirect("/apostas?mes={$mes}&ano={$ano}");
@@ -236,7 +252,7 @@ class BetController extends Controller
             return;
         }
 
-        $this->model->createMultiple([
+        $betId = $this->model->createMultiple([
             'usuario_id'       => $userId,
             'descricao'        => $descricao,
             'odd'              => $odd,
@@ -247,6 +263,8 @@ class BetController extends Controller
             'data_resultado'   => $status !== 'pendente' ? date('Y-m-d') : null,
             'observacao'       => $observacao ?: null,
         ], $selections);
+
+        $this->prospectModel->linkToBet($this->parseIdList((string) ($_POST['prospect_ids'] ?? '')), $betId, $userId);
 
         $this->setFlash('success', 'Aposta múltipla registrada com sucesso!');
         $this->redirect("/apostas?mes={$mes}&ano={$ano}");
@@ -354,6 +372,75 @@ class BetController extends Controller
     }
 
     // ----------------------------------------------------------------
+    // Possíveis entradas (levantamento antes de apostar)
+    // ----------------------------------------------------------------
+
+    public function prospectStore(): void
+    {
+        $userId = $this->requireBetAccess();
+        $this->verifyCsrf();
+
+        $mes = (int) ($_POST['mes_url'] ?? date('m'));
+        $ano = (int) ($_POST['ano_url'] ?? date('Y'));
+
+        $descricao   = trim((string) ($_POST['descricao'] ?? ''));
+        $categoriaId = (int) ($_POST['categoria_id'] ?? 0) ?: null;
+        $dataHora    = str_replace('T', ' ', trim((string) ($_POST['data_hora'] ?? '')));
+        if (strlen($dataHora) === 16) {
+            $dataHora .= ':00';
+        }
+        $odd = $this->parseDecimal((string) ($_POST['odd'] ?? '1'));
+
+        if ($descricao === '') {
+            $this->setFlash('error', 'Informe a descrição da possível entrada.');
+            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            return;
+        }
+
+        if ($odd <= 1) {
+            $this->setFlash('error', 'Informe uma odd válida (maior que 1).');
+            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            return;
+        }
+
+        $d = \DateTime::createFromFormat('Y-m-d H:i:s', $dataHora);
+        if ($d === false || $d->format('Y-m-d H:i:s') !== $dataHora) {
+            $this->setFlash('error', 'Informe uma data e hora válidas.');
+            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            return;
+        }
+
+        $this->prospectModel->create([
+            'usuario_id'   => $userId,
+            'descricao'    => $descricao,
+            'categoria_id' => $categoriaId,
+            'data_hora'    => $dataHora,
+            'odd'          => $odd,
+        ]);
+
+        $this->setFlash('success', 'Possível entrada registrada!');
+        $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+    }
+
+    public function prospectDestroy(string $id): void
+    {
+        $userId = $this->requireBetAccess();
+        $this->verifyCsrf();
+
+        $prospect = $this->prospectModel->find((int) $id);
+        if ($prospect === null || (int) $prospect['usuario_id'] !== $userId) {
+            $this->setFlash('error', 'Registro não encontrado.');
+            $this->redirect('/apostas');
+            return;
+        }
+
+        $this->prospectModel->delete((int) $id);
+
+        $this->setFlash('success', 'Possível entrada removida.');
+        $this->redirect('/apostas');
+    }
+
+    // ----------------------------------------------------------------
     // Link público
     // ----------------------------------------------------------------
 
@@ -399,7 +486,7 @@ class BetController extends Controller
 
         $kpis  = $this->model->getKpis($userId, $mes, $ano);
         $daily = $this->model->getDailyTotals($userId, $mes, $ano);
-        $saldoBanca = $this->bankModel->getBalance($userId);
+        $saldoBanca = $this->bankModel->getBalance($userId) + $this->model->getNetResultAllTime($userId);
 
         $this->view('bets/public', [
             'mes'        => $mes,
@@ -490,5 +577,17 @@ class BetController extends Controller
             return 0.0;
         }
         return (float) str_replace(',', '.', preg_replace('/[^\d,\.]/', '', $raw) ?? '0');
+    }
+
+    /**
+     * @return array<int,int>
+     */
+    private function parseIdList(string $raw): array
+    {
+        if (trim($raw) === '') {
+            return [];
+        }
+
+        return array_values(array_filter(array_map('intval', explode(',', $raw)), fn($id) => $id > 0));
     }
 }

@@ -206,6 +206,23 @@ class Bet extends Model
     }
 
     /**
+     * Resultado líquido de todas as apostas já resolvidas do usuário (histórico completo),
+     * usado para compor o saldo real da banca junto às entradas/saques manuais.
+     */
+    public function getNetResultAllTime(int $userId): float
+    {
+        $sql = "SELECT
+                    COALESCE(SUM(CASE WHEN status = 'vitoria' THEN " . self::SQL_LUCRO_VITORIA . " ELSE 0 END), 0)
+                    - COALESCE(SUM(CASE WHEN status = 'derrota' THEN " . self::SQL_PERDA_DERROTA . " ELSE 0 END), 0) AS resultado
+                FROM `{$this->table}`
+                WHERE usuario_id = ?";
+
+        $row = $this->db->fetch($sql, [$userId]);
+
+        return (float) ($row['resultado'] ?? 0);
+    }
+
+    /**
      * Totais agrupados dia a dia para o período (mês/ano).
      *
      * @return array<int,array<string,mixed>>
@@ -230,6 +247,12 @@ class Bet extends Model
 
         foreach ($rows as &$r) {
             $r['saldo'] = (float) $r['lucro'] - (float) $r['perda'];
+        }
+        unset($r);
+
+        // Comparativo com o dia anterior disponível na lista (ordenada do mais recente ao mais antigo).
+        foreach ($rows as $i => &$r) {
+            $r['comparativo'] = isset($rows[$i + 1]) ? $r['saldo'] - $rows[$i + 1]['saldo'] : null;
         }
         unset($r);
 

@@ -46,4 +46,43 @@ class BetBankMovement extends Model
 
         return (float) ($row['entradas'] ?? 0) - (float) ($row['saques'] ?? 0);
     }
+
+    /**
+     * Totais de depósitos/saques por mês, centrados em um mês/ano de referência
+     * (ex.: 2 meses antes e 2 meses depois, quando existirem).
+     *
+     * @return array<int,array{mes:int, ano:int, entradas:float, saques:float, saldo:float}>
+     */
+    public function getMonthlyTotals(int $userId, int $centerMes, int $centerAno, int $range = 2): array
+    {
+        $result = [];
+
+        for ($offset = -$range; $offset <= $range; $offset++) {
+            $ts  = mktime(0, 0, 0, $centerMes + $offset, 1, $centerAno);
+            $mes = (int) date('n', $ts);
+            $ano = (int) date('Y', $ts);
+
+            $row = $this->db->fetch(
+                "SELECT
+                    COALESCE(SUM(CASE WHEN `tipo` = 'entrada' THEN `valor` ELSE 0 END), 0) AS entradas,
+                    COALESCE(SUM(CASE WHEN `tipo` = 'saque'   THEN `valor` ELSE 0 END), 0) AS saques
+                 FROM `{$this->table}`
+                 WHERE `usuario_id` = ? AND MONTH(`data`) = ? AND YEAR(`data`) = ?",
+                [$userId, $mes, $ano]
+            );
+
+            $entradas = (float) ($row['entradas'] ?? 0);
+            $saques   = (float) ($row['saques'] ?? 0);
+
+            $result[] = [
+                'mes'      => $mes,
+                'ano'      => $ano,
+                'entradas' => $entradas,
+                'saques'   => $saques,
+                'saldo'    => $entradas - $saques,
+            ];
+        }
+
+        return $result;
+    }
 }
