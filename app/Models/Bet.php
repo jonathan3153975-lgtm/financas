@@ -14,8 +14,9 @@ class Bet extends Model
     /** Expressão SQL do lucro líquido de uma aposta (vitória) considerando fechamento antecipado. */
     private const SQL_LUCRO_VITORIA = "CASE WHEN valor_fechamento IS NOT NULL THEN valor_fechamento - valor_apostado ELSE (valor_apostado * odd) - valor_apostado END";
 
-    /** Expressão SQL da perda de uma aposta (derrota) considerando fechamento antecipado. */
-    private const SQL_PERDA_DERROTA = "CASE WHEN valor_fechamento IS NOT NULL THEN valor_apostado - valor_fechamento ELSE valor_apostado END";
+    /** Expressão SQL da perda de uma aposta (derrota) considerando fechamento antecipado.
+     *  Fechamentos negativos (ex.: -valor_apostado) representam diretamente o valor da perda. */
+    private const SQL_PERDA_DERROTA = "CASE WHEN valor_fechamento IS NULL THEN valor_apostado WHEN valor_fechamento < 0 THEN -valor_fechamento ELSE valor_apostado - valor_fechamento END";
 
     // ----------------------------------------------------------------
     // Create
@@ -223,6 +224,28 @@ class Bet extends Model
     }
 
     /**
+     * Resultado líquido acumulado das apostas anteriores a um mês/ano.
+     *
+     * Usado como "saldo inicial" do período no comparativo diário.
+     * Considera apenas ganhos/perdas das apostas (depósitos e saques são ignorados).
+     */
+    public function getNetResultBeforeMonth(int $userId, int $mes, int $ano): float
+    {
+        // Primeiro dia do mês de referência: tudo o que for anterior a ele compõe o saldo inicial.
+        $firstDayOfMonth = sprintf('%04d-%02d-01', $ano, $mes);
+
+        $sql = "SELECT
+                    COALESCE(SUM(CASE WHEN status = 'vitoria' THEN " . self::SQL_LUCRO_VITORIA . " ELSE 0 END), 0)
+                    - COALESCE(SUM(CASE WHEN status = 'derrota' THEN " . self::SQL_PERDA_DERROTA . " ELSE 0 END), 0) AS resultado
+                FROM `{$this->table}`
+                WHERE usuario_id = ? AND data_aposta < ?";
+
+        $row = $this->db->fetch($sql, [$userId, $firstDayOfMonth]);
+
+        return (float) ($row['resultado'] ?? 0);
+    }
+
+    /**
      * Totais agrupados dia a dia para o período (mês/ano).
      *
      * @return array<int,array<string,mixed>>
@@ -245,16 +268,24 @@ class Bet extends Model
 
         $rows = $this->db->fetchAll($sql, [$userId, $mes, $ano]);
 
+        // Resultado líquido de cada dia (ganhos - perdas). Depósitos/saques não entram.
         foreach ($rows as &$r) {
-            $r['saldo'] = (float) $r['lucro'] - (float) $r['perda'];
+            $r['resultado_dia'] = (float) $r['lucro'] - (float) $r['perda'];
         }
         unset($r);
 
-        // Comparativo com o dia anterior disponível na lista (ordenada do mais recente ao mais antigo).
-        foreach ($rows as $i => &$r) {
-            $r['comparativo'] = isset($rows[$i + 1]) ? $r['saldo'] - $rows[$i + 1]['saldo'] : null;
+        // Saldo inicial do período: resultado acumulado das apostas anteriores ao mês.
+        // Parte-se de um saldo já existente e aplica-se o resultado de cada dia.
+        $saldoAcumulado = $this->getNetResultBeforeMonth($userId, $mes, $ano);
+
+        // A consulta retorna os dias em ordem decrescente; percorremos de trás para frente
+        // (ordem cronológica) para acumular o saldo final do dia e comparar com o dia anterior.
+        for ($i = count($rows) - 1; $i >= 0; $i--) {
+            $saldoAnterior = $saldoAcumulado;                          // saldo final do dia anterior
+            $saldoAcumulado += (float) $rows[$i]['resultado_dia'];     // aplica ganhos - perdas do dia
+            $rows[$i]['saldo']       = $saldoAcumulado;                // saldo final do dia
+            $rows[$i]['comparativo'] = $saldoAcumulado - $saldoAnterior; // variação vs. dia anterior
         }
-        unset($r);
 
         return $rows;
     }
@@ -327,7 +358,11 @@ class Bet extends Model
 
         return match ($status) {
             'vitoria'   => $valorFechamento !== null ? ($valorFechamento - $valorApostado) : ($valorApostado * $odd - $valorApostado),
-            'derrota'   => $valorFechamento !== null ? ($valorFechamento - $valorApostado) : -$valorApostado,
+            // Derrota: fechamento negativo é a própria perda (ex.: -valor_apostado);
+            // fechamento nulo/positivo segue a regra de retorno parcial.
+            'derrota'   => $valorFechamento !== null
+                ? ($valorFechamento < 0 ? $valorFechamento : $valorFechamento - $valorApostado)
+                : -$valorApostado,
             'reembolso' => 0.0,
             default     => null,
         };

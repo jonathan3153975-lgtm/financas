@@ -21,6 +21,7 @@ function fmtBetMoneyPub(float $v): string {
         body { background: var(--bg, #f8fafc); padding: 24px; }
         .public-wrapper { max-width: 1100px; margin: 0 auto; }
         .public-banner { background: #0f172a; color: #f8fafc; padding: 14px 20px; border-radius: 12px; margin-bottom: 20px; display:flex; align-items:center; gap:10px; }
+        .bets-cell-cat { display: block; font-size: 12px; font-style: italic; color: var(--text-muted); margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -98,7 +99,7 @@ function fmtBetMoneyPub(float $v): string {
                         <tr>
                             <th>Data</th><th class="text-center">Apostas</th>
                             <th class="text-center">Vitórias</th><th class="text-center">Derrotas</th>
-                            <th class="text-right">Total Apostado</th><th class="text-right">Saldo do Dia</th>
+                            <th class="text-right">Total Apostado</th><th class="text-right">Saldo Final</th>
                             <th class="text-center">Detalhes</th>
                         </tr>
                     </thead>
@@ -138,7 +139,7 @@ function fmtBetMoneyPub(float $v): string {
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead>
-                        <tr><th>Descrição</th><th>Categoria</th><th>Odd</th><th class="text-right">Valor</th><th>Status</th><th class="text-right">Resultado</th></tr>
+                        <tr><th>Descrição</th><th>Odd</th><th class="text-right">Valor</th><th>Status</th><th class="text-right">Resultado</th></tr>
                     </thead>
                     <tbody id="dayModalBody"></tbody>
                 </table>
@@ -163,7 +164,7 @@ function fmtOddJs(v) { return Number(v).toFixed(2).replace('.', ','); }
 
 function openDayModal(date) {
     document.getElementById('dayModalDate').textContent = date.split('-').reverse().join('/');
-    document.getElementById('dayModalBody').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Carregando...</td></tr>';
+    document.getElementById('dayModalBody').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Carregando...</td></tr>';
     document.getElementById('modalDay').style.display = 'flex';
 
     fetch(`<?= htmlspecialchars($_SERVER['REQUEST_URI'] ?? '') ?>`.split('?')[0] + `/dia/${date}`)
@@ -172,7 +173,7 @@ function openDayModal(date) {
             const records = data.records || [];
             const tbody = document.getElementById('dayModalBody');
             if (!records.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Nenhum registro.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Nenhum registro.</td></tr>';
                 return;
             }
             tbody.innerHTML = records.map(r => {
@@ -180,8 +181,7 @@ function openDayModal(date) {
                 const lucro = r.lucro !== null && r.lucro !== undefined ? Number(r.lucro) : null;
                 const lucroHtml = lucro === null ? '<span class="text-muted">-</span>' : `<span class="${lucro >= 0 ? 'text-success' : 'text-danger'}">${lucro >= 0 ? '+' : '-'} ${fmtMoneyJs(lucro)}</span>`;
                 return `<tr>
-                    <td>${r.descricao}</td>
-                    <td>${r.categoria_nome || '-'}</td>
+                    <td><span class="bets-cell-desc">${r.descricao}</span>${r.categoria_nome ? `<span class="bets-cell-cat">${r.categoria_nome}</span>` : ''}</td>
                     <td>${fmtOddJs(r.odd)}</td>
                     <td class="text-right">${fmtMoneyJs(r.valor_apostado)}</td>
                     <td><span class="badge ${cls}">${label}</span></td>

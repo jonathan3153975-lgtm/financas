@@ -163,6 +163,33 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
         }
         .bets-prospect-combo { font-size: 13px; color: var(--text-muted); }
         .bets-prospect-combo strong { color: #a78bfa; font-size: 16px; }
+
+        /* Descrição com a categoria logo abaixo (fonte menor e itálica) */
+        .bets-cell-desc { font-weight: 600; }
+        .bets-cell-cat { display: block; font-size: 12px; font-style: italic; color: var(--text-muted); margin-top: 2px; }
+
+        /* Extrato por Período: largura ampliada e espaçamento entre filtros/cards/tabela */
+        #modalStatement .modal-dialog { max-width: 864px; } /* .modal-lg (720px) + 20% */
+        #modalStatement .filter-form { gap: 16px; margin-bottom: 20px; }
+        #modalStatement .filter-group { flex: 1 1 0; min-width: 140px; }
+        #modalStatement #stmtTotals { margin-bottom: 20px; }
+
+        /* Apostas do dia: mesma largura ampliada do Extrato por Período */
+        #modalDay .modal-dialog { max-width: 864px; }
+
+        /* Seleções da aposta múltipla (ao clicar no sinalizador) */
+        .bets-mult-badge { cursor: pointer; }
+        .bets-mult-badge:hover { filter: brightness(1.25); }
+        .bets-mult-sel-row td { background: rgba(139,92,246,.07); }
+        .bets-mult-sel { padding: 10px 4px 12px 20px; }
+        .bets-mult-sel-title { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); margin-bottom: 6px; }
+        .bets-mult-sel ul { margin: 0; padding-left: 18px; }
+        .bets-mult-sel li { font-size: 13px; color: var(--text); padding: 2px 0; }
+
+        @media (max-width: 640px) {
+            #modalStatement .modal-dialog,
+            #modalDay .modal-dialog { max-width: 100%; }
+        }
     </style>
 </head>
 <body class="bets-body">
@@ -411,7 +438,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                             <th class="text-center">Vitórias</th>
                             <th class="text-center">Derrotas</th>
                             <th class="text-right">Total Apostado</th>
-                            <th class="text-right">Saldo do Dia</th>
+                            <th class="text-right">Saldo Final</th>
                             <th class="text-center">Vs. dia anterior</th>
                             <th class="text-center">Ações</th>
                         </tr>
@@ -689,18 +716,18 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 <button class="modal-close" onclick="closeModal('modalStatement')"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="modal-body">
-                <div class="form-row">
-                    <div class="form-group col-4">
-                        <label class="form-label">De</label>
-                        <input type="date" class="form-control" id="stmt_inicio">
+                <div class="filter-form">
+                    <div class="filter-group">
+                        <label class="filter-label">De</label>
+                        <input type="date" class="form-control form-control-sm" id="stmt_inicio">
                     </div>
-                    <div class="form-group col-4">
-                        <label class="form-label">Até</label>
-                        <input type="date" class="form-control" id="stmt_fim">
+                    <div class="filter-group">
+                        <label class="filter-label">Até</label>
+                        <input type="date" class="form-control form-control-sm" id="stmt_fim">
                     </div>
-                    <div class="form-group col-4">
-                        <label class="form-label">Status</label>
-                        <select class="form-control" id="stmt_status">
+                    <div class="filter-group">
+                        <label class="filter-label">Status</label>
+                        <select class="form-control form-control-sm" id="stmt_status">
                             <option value="">Todas</option>
                             <option value="vitoria">Vitórias</option>
                             <option value="derrota">Derrotas</option>
@@ -708,16 +735,30 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                             <option value="reembolso">Reembolso</option>
                         </select>
                     </div>
+                    <div class="filter-actions">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="loadStatement()">
+                            <i class="fa-solid fa-magnifying-glass"></i> Buscar
+                        </button>
+                    </div>
                 </div>
-                <button type="button" class="btn btn-primary btn-sm" onclick="loadStatement()">
-                    <i class="fa-solid fa-magnifying-glass"></i> Buscar
-                </button>
 
                 <div id="stmtTotals" class="mt-3" style="display:none">
-                    <div class="cards-grid" style="grid-template-columns:repeat(3,1fr); gap:10px">
-                        <div class="summary-card"><div class="summary-card-value" id="stmtApostado">-</div><div class="summary-card-label">Total Apostado</div></div>
-                        <div class="summary-card card-income"><div class="summary-card-value neon-green" id="stmtRetorno">-</div><div class="summary-card-label">Retorno Líquido (<span id="stmtVitorias">0</span>)</div></div>
-                        <div class="summary-card card-expense"><div class="summary-card-value neon-red" id="stmtPerda">-</div><div class="summary-card-label">Perda (<span id="stmtDerrotas">0</span>)</div></div>
+                    <div class="bets-kpi-grid" style="margin-bottom:0">
+                        <div class="bets-kpi-card kpi-purple">
+                            <div class="bets-kpi-icon neon-purple"><i class="fa-solid fa-coins"></i></div>
+                            <div class="bets-kpi-value neon-purple" id="stmtApostado">-</div>
+                            <div class="bets-kpi-label">Total Apostado</div>
+                        </div>
+                        <div class="bets-kpi-card kpi-green">
+                            <div class="bets-kpi-icon neon-green"><i class="fa-solid fa-trophy"></i></div>
+                            <div class="bets-kpi-value neon-green" id="stmtRetorno">-</div>
+                            <div class="bets-kpi-label">Retorno Líquido (<span id="stmtVitorias">0</span>)</div>
+                        </div>
+                        <div class="bets-kpi-card kpi-red">
+                            <div class="bets-kpi-icon neon-red"><i class="fa-solid fa-skull-crossbones"></i></div>
+                            <div class="bets-kpi-value neon-red" id="stmtPerda">-</div>
+                            <div class="bets-kpi-label">Perda (<span id="stmtDerrotas">0</span>)</div>
+                        </div>
                     </div>
                 </div>
 
@@ -725,12 +766,12 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>Data</th><th>Descrição</th><th>Categoria</th><th>Odd</th>
+                                <th>Data</th><th>Descrição</th><th>Odd</th>
                                 <th class="text-right">Valor</th><th>Status</th><th class="text-right">Resultado</th>
                             </tr>
                         </thead>
                         <tbody id="stmtBody">
-                            <tr><td colspan="7" class="text-center text-muted py-4">Selecione um período e clique em Buscar.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted py-4">Selecione um período e clique em Buscar.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -761,7 +802,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>Descrição</th><th>Categoria</th><th>Odd</th>
+                                <th>Descrição</th><th>Odd</th>
                                 <th class="text-right">Valor</th><th>Status</th><th class="text-right">Resultado</th><th></th>
                             </tr>
                         </thead>
@@ -912,8 +953,42 @@ function toggleCurtain() {
     document.getElementById('curtainToggle').classList.toggle('open');
 }
 
+// Valor de fechamento pré-calculado conforme o status escolhido:
+// - vitória:   retorno bruto = valor apostado x odd de entrada (valor + lucro)
+// - derrota:   perda negativa = -valor apostado (será descontada do saldo)
+// - reembolso: devolve exatamente o valor apostado
+function valorFechamentoPorStatus(status, valor, odd) {
+    switch (status) {
+        case 'vitoria':   return valor * odd;
+        case 'derrota':   return -valor;
+        case 'reembolso': return valor;
+        default:          return 0;
+    }
+}
+
 function toggleFechamento(select, wrapId) {
-    document.getElementById(wrapId).style.display = select.value === 'pendente' ? 'none' : 'block';
+    const wrap = document.getElementById(wrapId);
+    const form = select.closest('form');
+    const status = select.value;
+
+    // O campo só é exibido quando o status possui resultado (não-pendente).
+    wrap.style.display = status === 'pendente' ? 'none' : 'block';
+
+    const fechEl = wrap.querySelector('input[name="valor_fechamento"]');
+    if (!fechEl || !form) return;
+
+    const valorEl = form.querySelector('[name="valor_apostado"]');
+    const oddEl   = form.querySelector('[name="odd"]');
+    const valor   = valorEl ? parseCurrency(valorEl.value) : 0;
+    const odd     = oddEl ? parseOdd(oddEl.value) : 0;
+
+    // Em "Derrota" o valor é calculado (-valor apostado) e não pode ser editado.
+    fechEl.readOnly = status === 'derrota';
+
+    // O status escolhido comanda o preenchimento automático do valor.
+    fechEl.dataset.autofill = '1';
+    const valorFechamento = valorFechamentoPorStatus(status, valor, odd);
+    fechEl.value = valorFechamento !== 0 ? valorFechamento.toFixed(2).replace('.', ',') : '';
 }
 
 // ------------------------------------------------------------
@@ -924,14 +999,22 @@ function bindReturnPreview(valorId, oddId, previewId, fechamentoId) {
     const oddEl = document.getElementById(oddId);
     const previewEl = document.getElementById(previewId);
     const fechEl = document.getElementById(fechamentoId);
+    const form = fechEl.closest('form');
+    const statusEl = form ? form.querySelector('select[name="status"]') : null;
 
     function recalc() {
         const valor = parseCurrency(valorEl.value);
         const odd = parseOdd(oddEl.value);
-        const retorno = valor + (valor * odd);
-        previewEl.innerHTML = 'Retorno estimado: <strong>' + fmtMoneyJs(retorno) + '</strong>';
+        const status = statusEl ? statusEl.value : 'pendente';
+
+        // Retorno bruto estimado = valor apostado x odd de entrada.
+        previewEl.innerHTML = 'Retorno estimado: <strong>' + fmtMoneyJs(valor * odd) + '</strong>';
+
+        // Preenche o valor de fechamento conforme o status (quando o usuário
+        // ainda não editou o campo manualmente).
         if (fechEl.dataset.autofill !== '0') {
-            fechEl.value = retorno > 0 ? retorno.toFixed(2).replace('.', ',') : '';
+            const valorFechamento = valorFechamentoPorStatus(status, valor, odd);
+            fechEl.value = valorFechamento !== 0 ? valorFechamento.toFixed(2).replace('.', ',') : '';
         }
     }
 
@@ -1017,7 +1100,7 @@ let currentDayRecords = [];
 
 function openDayModal(date) {
     document.getElementById('dayModalDate').textContent = date.split('-').reverse().join('/');
-    document.getElementById('dayModalBody').innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Carregando...</td></tr>';
+    document.getElementById('dayModalBody').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Carregando...</td></tr>';
     openModal('modalDay');
 
     fetch(`${APOSTAS_BASE}/apostas/dia/${date}`)
@@ -1038,7 +1121,7 @@ function filterDayRows(status) {
 function renderDayRows(records) {
     const tbody = document.getElementById('dayModalBody');
     if (!records.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Nenhum registro.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Nenhum registro.</td></tr>';
         return;
     }
 
@@ -1054,8 +1137,7 @@ function renderDayRows(records) {
             : `<button class="action-btn action-btn-danger" onclick="deleteBet(${r.id})" title="Excluir"><i class="fa-solid fa-trash"></i></button>`;
 
         return `<tr id="dayRow${r.id}">
-            <td>${r.descricao}${r.tipo === 'multipla' ? ' <span class="badge badge-secondary">Múltipla</span>' : ''}</td>
-            <td>${r.categoria_nome || '-'}</td>
+            <td><span class="bets-cell-desc">${r.descricao}</span>${r.tipo === 'multipla' ? ` <span class="badge badge-secondary bets-mult-badge" onclick="toggleMultipleSelections(${r.id})" title="Ver seleções da múltipla"><i class="fa-solid fa-layer-group"></i> Múltipla</span>` : ''}${r.categoria_nome ? `<span class="bets-cell-cat">${r.categoria_nome}</span>` : ''}</td>
             <td>${fmtOddJs(r.odd)}</td>
             <td class="text-right">${fmtMoneyJs(r.valor_apostado)}</td>
             <td><span class="badge ${cls}">${label}</span></td>
@@ -1063,6 +1145,34 @@ function renderDayRows(records) {
             <td class="text-right" id="dayActions${r.id}">${finalizeBtn}</td>
         </tr>`;
     }).join('');
+}
+
+// Múltipla: clicar no sinalizador lista as seleções agrupadas (descrição, uma por linha)
+function toggleMultipleSelections(betId) {
+    const existing = document.getElementById(`multSelRow${betId}`);
+    if (existing) {
+        existing.remove();
+        return;
+    }
+
+    const record = currentDayRecords.find(r => r.id === betId);
+    const selecoes = record && Array.isArray(record.selecoes) ? record.selecoes : [];
+    const items = selecoes.length
+        ? selecoes.map(s => `<li>${s.descricao}</li>`).join('')
+        : '<li class="text-muted">Nenhuma seleção registrada.</li>';
+
+    const tr = document.createElement('tr');
+    tr.id = `multSelRow${betId}`;
+    tr.className = 'bets-mult-sel-row';
+    tr.innerHTML = `<td colspan="6">
+        <div class="bets-mult-sel">
+            <div class="bets-mult-sel-title"><i class="fa-solid fa-layer-group"></i> Seleções da múltipla</div>
+            <ul>${items}</ul>
+        </div>
+    </td>`;
+
+    const row = document.getElementById(`dayRow${betId}`);
+    if (row) row.after(tr);
 }
 
 function openQuickFinalize(betId) {
@@ -1144,7 +1254,7 @@ function loadStatement() {
 
             const tbody = document.getElementById('stmtBody');
             if (!data.records || !data.records.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Nenhum registro no período.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Nenhum registro no período.</td></tr>';
                 return;
             }
 
@@ -1156,8 +1266,7 @@ function loadStatement() {
                     : `<span class="${lucro >= 0 ? 'neon-green' : 'neon-red'}">${lucro >= 0 ? '+' : '-'} ${fmtMoneyJs(lucro)}</span>`;
                 return `<tr>
                     <td>${r.data_aposta.split('-').reverse().join('/')}</td>
-                    <td>${r.descricao}</td>
-                    <td>${r.categoria_nome || '-'}</td>
+                    <td><span class="bets-cell-desc">${r.descricao}</span>${r.categoria_nome ? `<span class="bets-cell-cat">${r.categoria_nome}</span>` : ''}</td>
                     <td>${fmtOddJs(r.odd)}</td>
                     <td class="text-right">${fmtMoneyJs(r.valor_apostado)}</td>
                     <td><span class="badge ${cls}">${label}</span></td>
@@ -1276,7 +1385,7 @@ if (typeof Chart !== 'undefined') {
             data: {
                 labels: DAILY_CHART_DATA.map(d => d.data),
                 datasets: [{
-                    label: 'Saldo do dia',
+                    label: 'Saldo final',
                     data: DAILY_CHART_DATA.map(d => d.saldo),
                     borderColor: '#a78bfa',
                     backgroundColor: 'rgba(139,92,246,.18)',
