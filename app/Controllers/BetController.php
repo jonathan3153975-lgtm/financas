@@ -66,25 +66,96 @@ class BetController extends Controller
         $mes = max(1, min(12, (int) ($_GET['mes'] ?? date('m'))));
         $ano = max(2000, min((int) date('Y') + 1, (int) ($_GET['ano'] ?? date('Y'))));
 
-        $kpis   = $this->model->getKpis($userId, $mes, $ano);
-        $daily  = $this->model->getDailyTotals($userId, $mes, $ano);
-        // Saldo real = entradas/saques manuais + resultado líquido histórico das apostas
-        $saldoBanca = $this->bankModel->getBalance($userId) + $this->model->getNetResultAllTime($userId);
+        // Período livre: quando ambos os campos de data (início/fim) forem válidos,
+        // ele prevalece sobre o par mês/ano. Caso contrário, usamos o mês/ano selecionado.
+        $inicio      = trim((string) ($_GET['inicio'] ?? ''));
+        $fim         = trim((string) ($_GET['fim'] ?? ''));
+        $usandoRange = $this->isValidDate($inicio) && $this->isValidDate($fim);
+
+        if ($usandoRange && $inicio > $fim) {
+            [$inicio, $fim] = [$fim, $inicio];
+        }
+
+        if ($usandoRange) {
+            $periodInicio = $inicio;
+            $periodFim    = $fim;
+        } else {
+            $periodInicio = sprintf('%04d-%02d-01', $ano, $mes);
+            $periodFim    = date('Y-m-t', strtotime($periodInicio));
+        }
+
+        // Valores do período (mês/ano ou intervalo livre).
+        $kpis  = $this->model->getKpisRange($userId, $periodInicio, $periodFim);
+        $daily = $this->model->getDailyTotalsRange($userId, $periodInicio, $periodFim);
+
+        // Movimentações (depósitos/saques) do período.
+        $mov = $this->bankModel->getMovementsSummary($userId, $periodInicio, $periodFim);
+
+        // Saldo real da banca no início e no final do período
+        // (entradas/saques + resultado das apostas acumulados até cada momento).
+        $saldoInicio = $this->bankModel->getBalanceBefore($userId, $periodInicio)
+                    + $this->model->getNetResultBefore($userId, $periodInicio);
+        $saldoPeriodo = $saldoInicio
+                    + ($mov['entradas'] - $mov['saques'])
+                    + $kpis['retorno_liquido'] - $kpis['total_perda'];
+
+        // Balanço do período = crescimento/encolhimento real da banca, desconsiderando
+        // o efeito de depósitos e saques (equivalentes ao resultado das apostas no período).
+        $balanco    = $kpis['retorno_liquido'] - $kpis['total_perda'];
+        $balancoPct = abs($saldoInicio) > 0.0001 ? ($balanco / abs($saldoInicio)) * 100 : null;
+
+        // Saldo histórico total (todas as movimentações + todas as apostas).
+        $saldoTotalAllTime = $this->bankModel->getBalance($userId) + $this->model->getNetResultAllTime($userId);
+
+        // Apostas pendentes (não resolvidas) — valores bloqueados/descontados dos saldos exibidos.
+        $pendentes      = $this->model->getPendingTotals($userId, $periodInicio, $periodFim);
+        $pendentesAll   = $this->model->getPendingTotals($userId);
+        $saldoPeriodo      -= $pendentes['total_apostado'];
+        $saldoTotalAllTime -= $pendentesAll['total_apostado'];
+
         $categorias = $this->catModel->findActive();
         $shareLink  = $this->linkModel->findActiveForUser($userId);
 
+        // Filtro de possíveis entradas: restringe ao período principal e
+        // usa a data atual como valor padrão quando os campos estão vazios.
         $prospectDe  = trim((string) ($_GET['prospect_de']  ?? ''));
         $prospectAte = trim((string) ($_GET['prospect_ate'] ?? ''));
-        $prospects   = $this->prospectModel->findByUser($userId, $prospectDe ?: null, $prospectAte ?: null);
+
+        if (!$this->isValidDate($prospectDe) || !$this->isValidDate($prospectAte)) {
+            $prospectDe  = date('Y-m-d');
+            $prospectAte = date('Y-m-d');
+        }
+
+        // Limita ao período principal (não sai do lapso temporal selecionado no topo).
+        $prospectDe  = max($periodInicio, min($periodFim, $prospectDe));
+        $prospectAte = max($periodInicio, min($periodFim, $prospectAte));
+
+        if ($prospectDe > $prospectAte) {
+            [$prospectDe, $prospectAte] = [$prospectAte, $prospectDe];
+        }
+
+        $prospects = $this->prospectModel->findByUser($userId, $prospectDe, $prospectAte);
 
         $monthlyBankTotals = $this->bankModel->getMonthlyTotals($userId, $mes, $ano);
 
         $this->view('bets/index', [
             'mes'               => $mes,
             'ano'               => $ano,
+            'inicio'            => $inicio,
+            'fim'               => $fim,
+            'usandoRange'       => $usandoRange,
+            'periodInicio'      => $periodInicio,
+            'periodFim'         => $periodFim,
             'kpis'              => $kpis,
             'daily'             => $daily,
-            'saldoBanca'        => $saldoBanca,
+            'saldoPeriodo'      => $saldoPeriodo,
+            'saldoInicio'       => $saldoInicio,
+            'saldoTotalAllTime' => $saldoTotalAllTime,
+            'mov'               => $mov,
+            'balanco'           => $balanco,
+            'balancoPct'        => $balancoPct,
+            'pendentes'         => $pendentes,
+            'pendentesAll'      => $pendentesAll,
             'categorias'        => $categorias,
             'shareLink'         => $shareLink,
             'prospects'         => $prospects,

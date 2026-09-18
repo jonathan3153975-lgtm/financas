@@ -173,6 +173,21 @@ class Bet extends Model
      */
     public function getKpis(int $userId, int $mes, int $ano): array
     {
+        $inicio = sprintf('%04d-%02d-01', $ano, $mes);
+        $fim    = date('Y-m-t', strtotime($inicio));
+
+        return $this->getKpisRange($userId, $inicio, $fim);
+    }
+
+    /**
+     * KPIs do painel para um intervalo de datas (mês/ano ou período livre).
+     *
+     * @return array{total_apostado: float, media_aposta: float, retorno_liquido: float, media_retorno: float,
+     *               total_perda: float, media_perda: float, qtd_vitorias: int, qtd_derrotas: int,
+     *               qtd_pendentes: int, qtd_reembolsos: int, qtd_total: int}
+     */
+    public function getKpisRange(int $userId, string $inicio, string $fim): array
+    {
         $sql = "SELECT
                     COUNT(*) AS qtd_total,
                     COALESCE(SUM(valor_apostado), 0) AS total_apostado,
@@ -183,17 +198,19 @@ class Bet extends Model
                     SUM(CASE WHEN status = 'pendente'  THEN 1 ELSE 0 END) AS qtd_pendentes,
                     SUM(CASE WHEN status = 'reembolso' THEN 1 ELSE 0 END) AS qtd_reembolsos
                 FROM `{$this->table}`
-                WHERE usuario_id = ? AND MONTH(data_aposta) = ? AND YEAR(data_aposta) = ?";
+                WHERE usuario_id = ? AND data_aposta BETWEEN ? AND ?";
 
-        $row = $this->db->fetch($sql, [$userId, $mes, $ano]) ?? [];
+        $row = $this->db->fetch($sql, [$userId, $inicio, $fim]) ?? [];
 
         $qtdVitorias = (int) ($row['qtd_vitorias'] ?? 0);
         $qtdDerrotas = (int) ($row['qtd_derrotas'] ?? 0);
         $retornoLiquido = (float) ($row['retorno_liquido'] ?? 0);
         $totalPerda     = (float) ($row['total_perda'] ?? 0);
+        $qtdTotal       = (int) ($row['qtd_total'] ?? 0);
 
         return [
             'total_apostado'  => (float) ($row['total_apostado'] ?? 0),
+            'media_aposta'    => $qtdTotal > 0 ? (float) ($row['total_apostado'] ?? 0) / $qtdTotal : 0.0,
             'retorno_liquido' => $retornoLiquido,
             'media_retorno'   => $qtdVitorias > 0 ? $retornoLiquido / $qtdVitorias : 0.0,
             'total_perda'     => $totalPerda,
@@ -202,7 +219,39 @@ class Bet extends Model
             'qtd_derrotas'    => $qtdDerrotas,
             'qtd_pendentes'   => (int) ($row['qtd_pendentes'] ?? 0),
             'qtd_reembolsos'  => (int) ($row['qtd_reembolsos'] ?? 0),
-            'qtd_total'       => (int) ($row['qtd_total'] ?? 0),
+            'qtd_total'       => $qtdTotal,
+        ];
+    }
+
+    /**
+     * Pendentes: total apostado e possível retorno (valor x odd) para o período informado.
+     * Sem intervalo, considera todas as apostas pendentes (histórico).
+     *
+     * @return array{total_apostado: float, total_retorno: float}
+     */
+    public function getPendingTotals(int $userId, ?string $inicio = null, ?string $fim = null): array
+    {
+        $where  = "`usuario_id` = ? AND `status` = 'pendente'";
+        $params = [$userId];
+
+        if ($inicio !== null && $fim !== null) {
+            $where .= " AND `data_aposta` BETWEEN ? AND ?";
+            $params[] = $inicio;
+            $params[] = $fim;
+        }
+
+        $row = $this->db->fetch(
+            "SELECT
+                COALESCE(SUM(`valor_apostado`), 0) AS total_apostado,
+                COALESCE(SUM(`valor_apostado` * `odd`), 0) AS total_retorno
+             FROM `{$this->table}`
+             WHERE {$where}",
+            $params
+        ) ?? [];
+
+        return [
+            'total_apostado' => (float) ($row['total_apostado'] ?? 0),
+            'total_retorno'  => (float) ($row['total_retorno'] ?? 0),
         ];
     }
 
@@ -231,16 +280,24 @@ class Bet extends Model
      */
     public function getNetResultBeforeMonth(int $userId, int $mes, int $ano): float
     {
-        // Primeiro dia do mês de referência: tudo o que for anterior a ele compõe o saldo inicial.
-        $firstDayOfMonth = sprintf('%04d-%02d-01', $ano, $mes);
+        return $this->getNetResultBefore($userId, sprintf('%04d-%02d-01', $ano, $mes));
+    }
 
+    /**
+     * Resultado líquido acumulado das apostas anteriores a uma data.
+     *
+     * Usado como "saldo inicial" de um período (mês/ano ou intervalo livre).
+     * Considera apenas ganhos/perdas das apostas (depósitos e saques são ignorados).
+     */
+    public function getNetResultBefore(int $userId, string $date): float
+    {
         $sql = "SELECT
                     COALESCE(SUM(CASE WHEN status = 'vitoria' THEN " . self::SQL_LUCRO_VITORIA . " ELSE 0 END), 0)
                     - COALESCE(SUM(CASE WHEN status = 'derrota' THEN " . self::SQL_PERDA_DERROTA . " ELSE 0 END), 0) AS resultado
                 FROM `{$this->table}`
                 WHERE usuario_id = ? AND data_aposta < ?";
 
-        $row = $this->db->fetch($sql, [$userId, $firstDayOfMonth]);
+        $row = $this->db->fetch($sql, [$userId, $date]);
 
         return (float) ($row['resultado'] ?? 0);
     }
@@ -252,6 +309,22 @@ class Bet extends Model
      */
     public function getDailyTotals(int $userId, int $mes, int $ano): array
     {
+        $inicio = sprintf('%04d-%02d-01', $ano, $mes);
+        $fim    = date('Y-m-t', strtotime($inicio));
+
+        return $this->getDailyTotalsRange($userId, $inicio, $fim);
+    }
+
+    /**
+     * Totais agrupados dia a dia para um intervalo de datas (mês/ano ou período livre).
+     *
+     * A coluna saldo acumula o resultado (ganhos - perdas) de cada dia sobre o saldo
+     * inicial das apostas anteriores ao período; depósitos e saques não entram neste total.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function getDailyTotalsRange(int $userId, string $inicio, string $fim): array
+    {
         $sql = "SELECT
                     data_aposta AS data,
                     COUNT(*) AS qtd,
@@ -262,29 +335,24 @@ class Bet extends Model
                     SUM(CASE WHEN status = 'derrota'  THEN 1 ELSE 0 END) AS derrotas,
                     SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) AS pendentes
                 FROM `{$this->table}`
-                WHERE usuario_id = ? AND MONTH(data_aposta) = ? AND YEAR(data_aposta) = ?
+                WHERE usuario_id = ? AND data_aposta BETWEEN ? AND ?
                 GROUP BY data_aposta
                 ORDER BY data_aposta DESC";
 
-        $rows = $this->db->fetchAll($sql, [$userId, $mes, $ano]);
+        $rows = $this->db->fetchAll($sql, [$userId, $inicio, $fim]);
 
-        // Resultado líquido de cada dia (ganhos - perdas). Depósitos/saques não entram.
         foreach ($rows as &$r) {
             $r['resultado_dia'] = (float) $r['lucro'] - (float) $r['perda'];
         }
         unset($r);
 
-        // Saldo inicial do período: resultado acumulado das apostas anteriores ao mês.
-        // Parte-se de um saldo já existente e aplica-se o resultado de cada dia.
-        $saldoAcumulado = $this->getNetResultBeforeMonth($userId, $mes, $ano);
+        $saldoAcumulado = $this->getNetResultBefore($userId, $inicio);
 
-        // A consulta retorna os dias em ordem decrescente; percorremos de trás para frente
-        // (ordem cronológica) para acumular o saldo final do dia e comparar com o dia anterior.
         for ($i = count($rows) - 1; $i >= 0; $i--) {
-            $saldoAnterior = $saldoAcumulado;                          // saldo final do dia anterior
-            $saldoAcumulado += (float) $rows[$i]['resultado_dia'];     // aplica ganhos - perdas do dia
-            $rows[$i]['saldo']       = $saldoAcumulado;                // saldo final do dia
-            $rows[$i]['comparativo'] = $saldoAcumulado - $saldoAnterior; // variação vs. dia anterior
+            $saldoAnterior = $saldoAcumulado;
+            $saldoAcumulado += (float) $rows[$i]['resultado_dia'];
+            $rows[$i]['saldo']       = $saldoAcumulado;
+            $rows[$i]['comparativo'] = $saldoAcumulado - $saldoAnterior;
         }
 
         return $rows;

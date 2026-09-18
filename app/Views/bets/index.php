@@ -19,6 +19,8 @@ function fmtBetOdd(float $v): string {
     return number_format($v, 2, ',', '.');
 }
 
+$periodoLabel = date('d/m/Y', strtotime($periodInicio)) . ' a ' . date('d/m/Y', strtotime($periodFim));
+
 $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['token']) : '';
 ?>
 <!DOCTYPE html>
@@ -55,6 +57,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
         .neon-red    { color: #ff2e63 !important; text-shadow: 0 0 12px rgba(255,46,99,.55); }
         .neon-purple { color: #a78bfa !important; text-shadow: 0 0 12px rgba(167,139,250,.5); }
         .neon-blue   { color: #38bdf8 !important; text-shadow: 0 0 12px rgba(56,189,248,.5); }
+        .neon-amber  { color: #facc15 !important; text-shadow: 0 0 12px rgba(250,204,21,.5); }
 
         .bets-topbar {
             display: flex; align-items: center; justify-content: space-between;
@@ -96,6 +99,8 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
         .bets-kpi-card.kpi-green  { border-color: rgba(57,255,136,.35);  box-shadow: 0 0 24px rgba(57,255,136,.1); }
         .bets-kpi-card.kpi-red    { border-color: rgba(255,46,99,.35);   box-shadow: 0 0 24px rgba(255,46,99,.1); }
         .bets-kpi-card.kpi-purple { border-color: rgba(139,92,246,.35);  box-shadow: 0 0 24px rgba(139,92,246,.1); }
+        .bets-kpi-card.kpi-blue   { border-color: rgba(56,189,248,.35);  box-shadow: 0 0 24px rgba(56,189,248,.1); }
+        .bets-kpi-card.kpi-amber  { border-color: rgba(250,204,21,.35);  box-shadow: 0 0 24px rgba(250,204,21,.1); }
         .bets-kpi-icon { font-size: 20px; margin-bottom: 10px; opacity: .85; }
         .bets-kpi-value { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
         .bets-kpi-label { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; }
@@ -104,6 +109,12 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
             border-top: 1px dashed var(--border); padding-top: 10px; font-size: 13px; color: var(--text-muted);
         }
         .bets-kpi-sub strong { color: var(--text); }
+
+        /* Barra de definição do período no topo */
+        .bets-period-bar { margin-bottom: 20px; }
+        .bets-period-bar .filter-group { flex: 0 0 auto; }
+        .bets-period-divider { align-self: flex-end; padding-bottom: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); }
+        .bets-period-bar-active { border: 1px solid rgba(139,92,246,.45); border-radius: 14px; padding: 12px 16px; background: rgba(139,92,246,.06); margin-bottom: 16px; }
 
         .bets-curtain { margin-bottom: 20px; }
         .curtain-toggle {
@@ -223,15 +234,55 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
     <?php endif; endforeach; ?>
 
     <!-- ================================================================
+         Definição do período (mês/ano ou intervalo de datas)
+    ================================================================ -->
+    <form method="GET" action="<?= $basePath ?>/apostas"
+          class="filter-form bets-period-bar <?= $usandoRange ? 'bets-period-bar-active' : '' ?>">
+        <div class="filter-group">
+            <label class="filter-label">Mês</label>
+            <select name="mes" id="periodMes" class="form-control form-control-sm"
+                    onchange="document.getElementById('periodInicio').value='';document.getElementById('periodFim').value='';this.form.submit()">
+                <?php for ($m = 1; $m <= 12; $m++): ?>
+                <option value="<?= $m ?>" <?= $m === $mes ? 'selected' : '' ?>><?= $meses[$m] ?></option>
+                <?php endfor; ?>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Ano</label>
+            <select name="ano" id="periodAno" class="form-control form-control-sm"
+                    onchange="document.getElementById('periodInicio').value='';document.getElementById('periodFim').value='';this.form.submit()">
+                <?php for ($y = (int) date('Y') - 4; $y <= (int) date('Y') + 1; $y++): ?>
+                <option value="<?= $y ?>" <?= $y === $ano ? 'selected' : '' ?>><?= $y ?></option>
+                <?php endfor; ?>
+            </select>
+        </div>
+        <span class="bets-period-divider">ou período</span>
+        <div class="filter-group">
+            <label class="filter-label">De</label>
+            <input type="date" name="inicio" id="periodInicio" class="form-control form-control-sm" value="<?= htmlspecialchars($inicio) ?>">
+        </div>
+        <div class="filter-group">
+            <label class="filter-label">Até</label>
+            <input type="date" name="fim" id="periodFim" class="form-control form-control-sm" value="<?= htmlspecialchars($fim) ?>">
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-filter"></i> Filtrar</button>
+        </div>
+    </form>
+
+    <!-- ================================================================
          Saldo da banca — destaque
     ================================================================ -->
     <div class="bets-hero">
         <div>
-            <div class="bets-hero-label">Saldo Atual da Banca</div>
-            <div class="bets-hero-value <?= $saldoBanca >= 0 ? 'neon-green' : 'neon-red' ?>">
-                <?= $saldoBanca < 0 ? '- ' : '' ?><?= fmtBetMoney($saldoBanca) ?>
+            <div class="bets-hero-label">Saldo Final do Período</div>
+            <div class="bets-hero-value <?= $saldoPeriodo >= 0 ? 'neon-green' : 'neon-red' ?>">
+                <?= $saldoPeriodo < 0 ? '- ' : '' ?><?= fmtBetMoney($saldoPeriodo) ?>
             </div>
-            <div class="bets-hero-meta">Entradas/saques manuais + resultado histórico das apostas</div>
+            <div class="bets-hero-meta">
+                Período: <?= $periodoLabel ?> · Saldo inicial: <?= fmtBetMoney($saldoInicio) ?><br>
+                Saldo total histórico: <?= fmtBetMoney($saldoTotalAllTime) ?>
+            </div>
         </div>
         <div style="text-align:right">
             <div class="bets-hero-meta"><?= $kpis['qtd_pendentes'] ?> pendente(s) · <?= $kpis['qtd_reembolsos'] ?> reembolso(s)</div>
@@ -249,10 +300,14 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
         <div class="bets-kpi-card kpi-purple">
             <div class="bets-kpi-icon neon-purple"><i class="fa-solid fa-coins"></i></div>
             <div class="bets-kpi-value neon-purple"><?= fmtBetMoney($kpis['total_apostado']) ?></div>
-            <div class="bets-kpi-label">Total Apostado — <?= $meses[$mes] ?>/<?= $ano ?></div>
+            <div class="bets-kpi-label">Total Apostado — <?= $periodoLabel ?></div>
             <div class="bets-kpi-sub">
                 <span>Apostas no período</span>
                 <strong><?= $kpis['qtd_total'] ?></strong>
+            </div>
+            <div class="bets-kpi-sub">
+                <span>Média por aposta</span>
+                <strong><?= fmtBetMoney($kpis['media_aposta']) ?></strong>
             </div>
         </div>
 
@@ -276,6 +331,44 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
             </div>
         </div>
 
+    </div>
+
+    <div class="bets-kpi-grid" style="grid-template-columns: repeat(3, 1fr)">
+        <div class="bets-kpi-card kpi-blue">
+            <div class="bets-kpi-icon neon-blue"><i class="fa-solid fa-money-bill-transfer"></i></div>
+            <div class="bets-kpi-value neon-blue"><?= fmtBetMoney($mov['entradas'] - $mov['saques']) ?></div>
+            <div class="bets-kpi-label">Depósitos / Saques — <?= $periodoLabel ?></div>
+            <div class="bets-kpi-sub">
+                <span>Depósitos</span>
+                <strong class="neon-green">+ <?= fmtBetMoney($mov['entradas']) ?></strong>
+            </div>
+            <div class="bets-kpi-sub">
+                <span>Saques</span>
+                <strong class="neon-red">- <?= fmtBetMoney($mov['saques']) ?></strong>
+            </div>
+        </div>
+
+        <div class="bets-kpi-card <?= $balanco >= 0 ? 'kpi-green' : 'kpi-red' ?>">
+            <div class="bets-kpi-icon <?= $balanco >= 0 ? 'neon-green' : 'neon-red' ?>"><i class="fa-solid fa-scale-balanced"></i></div>
+            <div class="bets-kpi-value <?= $balanco >= 0 ? 'neon-green' : 'neon-red' ?>">
+                <?= $balanco >= 0 ? '+ ' : '- ' ?><?= fmtBetMoney($balanco) ?>
+            </div>
+            <div class="bets-kpi-label">Balanço do Período — <?= $periodoLabel ?></div>
+            <div class="bets-kpi-sub">
+                <span>Variação sobre saldo inicial</span>
+                <strong><?= $balancoPct === null ? '—' : ($balancoPct > 0 ? '+' : '') . number_format($balancoPct, 1, ',', '.') . '%' ?></strong>
+            </div>
+        </div>
+
+        <div class="bets-kpi-card kpi-amber">
+            <div class="bets-kpi-icon neon-amber"><i class="fa-solid fa-hourglass-half"></i></div>
+            <div class="bets-kpi-value neon-amber"><?= fmtBetMoney($pendentes['total_apostado']) ?></div>
+            <div class="bets-kpi-label">Apostas Pendentes (<?= $kpis['qtd_pendentes'] ?>)</div>
+            <div class="bets-kpi-sub">
+                <span>Possível retorno</span>
+                <strong class="neon-amber"><?= fmtBetMoney($pendentes['total_retorno']) ?></strong>
+            </div>
+        </div>
     </div>
 
     <!-- ================================================================
@@ -319,6 +412,8 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
             <form method="GET" action="<?= $basePath ?>/apostas" class="filter-form filter-open" style="margin-bottom:14px">
                 <input type="hidden" name="mes" value="<?= $mes ?>">
                 <input type="hidden" name="ano" value="<?= $ano ?>">
+                <input type="hidden" name="inicio" value="<?= htmlspecialchars($inicio) ?>">
+                <input type="hidden" name="fim" value="<?= htmlspecialchars($fim) ?>">
                 <div class="filter-group">
                     <label class="filter-label">De</label>
                     <input type="date" name="prospect_de" class="form-control form-control-sm" value="<?= htmlspecialchars($prospectDe) ?>">
@@ -329,9 +424,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 </div>
                 <div class="filter-actions">
                     <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-magnifying-glass"></i> Filtrar</button>
-                    <?php if ($prospectDe || $prospectAte): ?>
-                    <a href="<?= $basePath ?>/apostas?mes=<?= $mes ?>&ano=<?= $ano ?>" class="btn btn-ghost btn-sm">Limpar</a>
-                    <?php endif; ?>
+                    <a href="<?= $basePath ?>/apostas?mes=<?= $mes ?>&ano=<?= $ano ?><?= $usandoRange ? '&inicio=' . urlencode($inicio) . '&fim=' . urlencode($fim) : '' ?>" class="btn btn-ghost btn-sm">Limpar</a>
                 </div>
             </form>
         </div>
@@ -409,18 +502,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
     <div class="bets-daily-card" style="margin-top:20px">
         <div class="card-header">
             <h3 class="card-title"><i class="fa-solid fa-calendar-days"></i> Totais Diários</h3>
-            <form method="GET" action="<?= $basePath ?>/apostas" class="period-form">
-                <select name="mes" class="form-control form-control-sm" onchange="this.form.submit()">
-                    <?php for ($m = 1; $m <= 12; $m++): ?>
-                    <option value="<?= $m ?>" <?= $m === $mes ? 'selected' : '' ?>><?= $meses[$m] ?></option>
-                    <?php endfor; ?>
-                </select>
-                <select name="ano" class="form-control form-control-sm" onchange="this.form.submit()">
-                    <?php for ($y = (int) date('Y') - 4; $y <= (int) date('Y') + 1; $y++): ?>
-                    <option value="<?= $y ?>" <?= $y === $ano ? 'selected' : '' ?>><?= $y ?></option>
-                    <?php endfor; ?>
-                </select>
-            </form>
+            <span class="card-subtitle"><?= $periodoLabel ?></span>
         </div>
         <div class="card-body p-0">
             <?php if (empty($daily)): ?>
@@ -489,7 +571,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
         <div class="bets-daily-card">
             <div class="card-header">
                 <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Evolução Diária</h3>
-                <span class="card-subtitle"><?= $meses[$mes] ?> / <?= $ano ?></span>
+                <span class="card-subtitle"><?= $periodoLabel ?></span>
             </div>
             <div class="card-body">
                 <canvas id="chartDailyEvolution" height="220"></canvas>
@@ -628,6 +710,9 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                             <label class="form-label">Data da Aposta</label>
                             <input type="date" class="form-control" name="data_aposta" value="<?= $todayDate ?>" required>
                         </div>
+                    </div>
+
+                    <div class="form-row">
                         <div class="form-group col-6">
                             <label class="form-label">Status</label>
                             <select class="form-control" name="status" onchange="toggleFechamento(this, 'multFechamentoWrap')">
@@ -637,9 +722,6 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                                 <option value="reembolso">Reembolso</option>
                             </select>
                         </div>
-                    </div>
-
-                    <div class="form-row">
                         <div class="form-group col-6" id="multFechamentoWrap" style="display:none">
                             <label class="form-label">Valor de Fechamento</label>
                             <input type="text" class="form-control currency-input" name="valor_fechamento" id="mult_fechamento">
@@ -1007,8 +1089,8 @@ function bindReturnPreview(valorId, oddId, previewId, fechamentoId) {
         const odd = parseOdd(oddEl.value);
         const status = statusEl ? statusEl.value : 'pendente';
 
-        // Retorno bruto estimado = valor apostado x odd de entrada.
-        previewEl.innerHTML = 'Retorno estimado: <strong>' + fmtMoneyJs(valor * odd) + '</strong>';
+        // Retorno estimado = valor apostado x odd (retorno bruto, já somado ao valor apostado).
+        previewEl.innerHTML = 'Retorno estimado (valor + lucro): <strong>' + fmtMoneyJs(valor * odd) + '</strong>';
 
         // Preenche o valor de fechamento conforme o status (quando o usuário
         // ainda não editou o campo manualmente).
@@ -1177,20 +1259,38 @@ function toggleMultipleSelections(betId) {
 
 function openQuickFinalize(betId) {
     const cell = document.getElementById(`dayActions${betId}`);
-    const record = currentDayRecords.find(r => r.id === betId);
-    const previsto = record ? (Number(record.valor_apostado) + (Number(record.valor_apostado) * Number(record.odd))) : 0;
     cell.innerHTML = `
         <div style="display:flex; gap:4px; justify-content:flex-end">
-            <select class="form-control form-control-sm" id="fin_status_${betId}" style="width:110px">
+            <select class="form-control form-control-sm" id="fin_status_${betId}" style="width:110px" onchange="updateQuickFinalizeValor(${betId})">
                 <option value="vitoria">Vitória</option>
                 <option value="derrota">Derrota</option>
                 <option value="reembolso">Reembolso</option>
             </select>
             <input type="text" class="form-control form-control-sm currency-input" id="fin_valor_${betId}"
-                   placeholder="Fechamento" style="width:100px" value="${previsto > 0 ? previsto.toFixed(2).replace('.', ',') : ''}">
+                   placeholder="Fechamento" style="width:100px" data-autofill="1"
+                   oninput="this.dataset.autofill='0'">
             <button class="action-btn action-btn-success" onclick="submitQuickFinalize(${betId})" title="Confirmar"><i class="fa-solid fa-check"></i></button>
         </div>
     `;
+    updateQuickFinalizeValor(betId);
+}
+
+// Preenche o valor de fechamento conforme o status (padrão idêntico ao modal de aposta):
+// - vitória:   valor apostado x odd (retorno bruto, somado ao valor apostado)
+// - derrota:   -valor apostado (somente leitura)
+// - reembolso: devolve exatamente o valor apostado
+function updateQuickFinalizeValor(betId) {
+    const input = document.getElementById(`fin_valor_${betId}`);
+    if (!input || input.dataset.autofill === '0') return;
+
+    const record = currentDayRecords.find(r => r.id === betId);
+    const status = document.getElementById(`fin_status_${betId}`).value;
+    const valor  = record ? Number(record.valor_apostado) : 0;
+    const odd    = record ? Number(record.odd) : 0;
+
+    const fechamento = valorFechamentoPorStatus(status, valor, odd);
+    input.value = fechamento !== 0 ? fechamento.toFixed(2).replace('.', ',') : '';
+    input.readOnly = status === 'derrota';
 }
 
 function submitQuickFinalize(betId) {

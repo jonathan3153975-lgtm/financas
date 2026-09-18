@@ -48,6 +48,46 @@ class BetBankMovement extends Model
     }
 
     /**
+     * Saldo da banca (entradas - saques) acumulado antes de uma data.
+     * Usado como "saldo inicial" real de um período.
+     */
+    public function getBalanceBefore(int $userId, string $date): float
+    {
+        $row = $this->db->fetch(
+            "SELECT
+                COALESCE(SUM(CASE WHEN `tipo` = 'entrada' THEN `valor` ELSE 0 END), 0) AS entradas,
+                COALESCE(SUM(CASE WHEN `tipo` = 'saque'   THEN `valor` ELSE 0 END), 0) AS saques
+             FROM `{$this->table}`
+             WHERE `usuario_id` = ? AND `data` < ?",
+            [$userId, $date]
+        );
+
+        return (float) ($row['entradas'] ?? 0) - (float) ($row['saques'] ?? 0);
+    }
+
+    /**
+     * Totais de depósitos (entradas) e saques dentro de um intervalo de datas.
+     *
+     * @return array{entradas: float, saques: float}
+     */
+    public function getMovementsSummary(int $userId, string $inicio, string $fim): array
+    {
+        $row = $this->db->fetch(
+            "SELECT
+                COALESCE(SUM(CASE WHEN `tipo` = 'entrada' THEN `valor` ELSE 0 END), 0) AS entradas,
+                COALESCE(SUM(CASE WHEN `tipo` = 'saque'   THEN `valor` ELSE 0 END), 0) AS saques
+             FROM `{$this->table}`
+             WHERE `usuario_id` = ? AND `data` BETWEEN ? AND ?",
+            [$userId, $inicio, $fim]
+        ) ?? [];
+
+        return [
+            'entradas' => (float) ($row['entradas'] ?? 0),
+            'saques'   => (float) ($row['saques'] ?? 0),
+        ];
+    }
+
+    /**
      * Totais de depósitos/saques por mês, centrados em um mês/ano de referência
      * (ex.: 2 meses antes e 2 meses depois, quando existirem).
      *
