@@ -9,6 +9,7 @@ use App\Models\BetCategory;
 use App\Models\BetBankMovement;
 use App\Models\BetShareLink;
 use App\Models\BetProspect;
+use App\Models\BetMonthlyGoal;
 use App\Models\User;
 
 /**
@@ -24,6 +25,7 @@ class BetController extends Controller
     private BetBankMovement $bankModel;
     private BetShareLink $linkModel;
     private BetProspect $prospectModel;
+    private BetMonthlyGoal $metaModel;
 
     public function __construct()
     {
@@ -33,6 +35,7 @@ class BetController extends Controller
         $this->bankModel     = new BetBankMovement();
         $this->linkModel     = new BetShareLink();
         $this->prospectModel = new BetProspect();
+        $this->metaModel     = new BetMonthlyGoal();
     }
 
     // ----------------------------------------------------------------
@@ -104,6 +107,10 @@ class BetController extends Controller
         $balanco    = $kpis['retorno_liquido'] - $kpis['total_perda'];
         $balancoPct = abs($saldoInicio) > 0.0001 ? ($balanco / abs($saldoInicio)) * 100 : null;
 
+        // Balanço médio por dia jogado (média do resultado líquido dos dias com apostas).
+        $diasJogados = count($daily);
+        $balancoDia  = $diasJogados > 0 ? $balanco / $diasJogados : null;
+
         // Saldo histórico total (todas as movimentações + todas as apostas).
         $saldoTotalAllTime = $this->bankModel->getBalance($userId) + $this->model->getNetResultAllTime($userId);
 
@@ -138,6 +145,48 @@ class BetController extends Controller
 
         $monthlyBankTotals = $this->bankModel->getMonthlyTotals($userId, $mes, $ano);
 
+        // Meta mensal: valor a ser atingido no mês selecionado (mês/ano do topo).
+        // O progresso é o balanço do mês (retorno - perda), independente do intervalo
+        // livre exibido no topo. Quando o período é o próprio mês, reutiliza os KPIs.
+        $primeiroDiaMes = sprintf('%04d-%02d-01', $ano, $mes);
+        $ultimoDiaMes   = (int) date('t', strtotime($primeiroDiaMes));
+        $kpisMes = ($periodInicio === $primeiroDiaMes && $periodFim === date('Y-m-t', strtotime($primeiroDiaMes)))
+            ? $kpis
+            : $this->model->getKpisRange($userId, $primeiroDiaMes, date('Y-m-t', strtotime($primeiroDiaMes)));
+
+        $metaValor    = $this->metaModel->getForUserMonth($userId, $mes, $ano);
+        $metaBalanco  = $kpisMes['retorno_liquido'] - $kpisMes['total_perda'];
+        $metaFaltante = $metaValor !== null ? $metaValor - $metaBalanco : null;
+        $metaAtingida = $metaFaltante !== null && $metaFaltante <= 0;
+
+        // Dias restantes do mês a partir do último dia em que houve aposta
+        // (sem aposta no mês, usa a data de hoje como referência).
+        $ultimaAposta = $this->model->getLastBetDate($userId, $mes, $ano);
+        $anchorDia    = $ultimaAposta !== null ? (int) date('j', strtotime($ultimaAposta)) : (int) date('j');
+        $metaDias     = max(0, $ultimoDiaMes - $anchorDia);
+        $metaDiario   = ($metaFaltante !== null && $metaFaltante > 0 && $metaDias > 0) ? $metaFaltante / $metaDias : null;
+
+        // Metas diárias da tabela de totais: a meta de cada dia é uma média que varia
+        // conforme o saldo acumulado até o dia anterior — (meta − saldo anterior) / dias restantes.
+        // O percentual indica quanto o resultado líquido do dia subiu (+) ou desceu (−) da meta do dia.
+        $metaDiaMap = [];
+        if ($metaValor !== null) {
+            $metaFimMes    = date('Y-m-t', strtotime($primeiroDiaMes));
+            $dailyMesAsc   = array_reverse($this->model->getDailyTotalsRange($userId, $primeiroDiaMes, $metaFimMes));
+            $saldoAnterior = $this->model->getNetResultBefore($userId, $primeiroDiaMes);
+
+            foreach ($dailyMesAsc as $r) {
+                $dia        = (int) date('j', strtotime((string) $r['data']));
+                $restantes  = $ultimoDiaMes - $dia;
+                $metaDia    = $restantes > 0 ? ($metaValor - $saldoAnterior) / $restantes : null;
+                $resultado  = (float) $r['resultado_dia'];
+                $pctMeta    = ($metaDia !== null && abs($metaDia) > 0.0001) ? ($resultado / $metaDia) * 100 : null;
+
+                $metaDiaMap[(string) $r['data']] = ['meta' => $metaDia, 'pct' => $pctMeta];
+                $saldoAnterior = (float) $r['saldo'];
+            }
+        }
+
         $this->view('bets/index', [
             'mes'               => $mes,
             'ano'               => $ano,
@@ -154,6 +203,7 @@ class BetController extends Controller
             'mov'               => $mov,
             'balanco'           => $balanco,
             'balancoPct'        => $balancoPct,
+            'balancoDia'        => $balancoDia,
             'pendentes'         => $pendentes,
             'pendentesAll'      => $pendentesAll,
             'categorias'        => $categorias,
@@ -162,6 +212,13 @@ class BetController extends Controller
             'prospectDe'        => $prospectDe,
             'prospectAte'       => $prospectAte,
             'monthlyBankTotals' => $monthlyBankTotals,
+            'metaValor'         => $metaValor,
+            'metaBalanco'       => $metaBalanco,
+            'metaFaltante'      => $metaFaltante,
+            'metaAtingida'      => $metaAtingida,
+            'metaDias'          => $metaDias,
+            'metaDiario'        => $metaDiario,
+            'metaDiaMap'        => $metaDiaMap,
             'csrf'              => $this->csrfToken(),
             'flash'             => $this->getFlash(),
         ], 'none');
@@ -244,7 +301,7 @@ class BetController extends Controller
         $error = $this->validateBet($descricao, $odd, $valorApostado, $status, $dataAposta);
         if ($error !== null) {
             $this->setFlash('error', $error);
-            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            $this->redirect($this->betRedirectBack());
             return;
         }
 
@@ -264,7 +321,7 @@ class BetController extends Controller
         $this->prospectModel->linkToBet($this->parseIdList((string) ($_POST['prospect_ids'] ?? '')), $betId, $userId);
 
         $this->setFlash('success', 'Aposta registrada com sucesso!');
-        $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+        $this->redirect($this->betRedirectBack());
     }
 
     // ----------------------------------------------------------------
@@ -312,14 +369,14 @@ class BetController extends Controller
 
         if (count($selections) < 2) {
             $this->setFlash('error', 'Inclua ao menos duas seleções para uma aposta múltipla.');
-            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            $this->redirect($this->betRedirectBack());
             return;
         }
 
         $error = $this->validateBet($descricao, $odd, $valorApostado, $status, $dataAposta);
         if ($error !== null) {
             $this->setFlash('error', $error);
-            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            $this->redirect($this->betRedirectBack());
             return;
         }
 
@@ -338,7 +395,7 @@ class BetController extends Controller
         $this->prospectModel->linkToBet($this->parseIdList((string) ($_POST['prospect_ids'] ?? '')), $betId, $userId);
 
         $this->setFlash('success', 'Aposta múltipla registrada com sucesso!');
-        $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+        $this->redirect($this->betRedirectBack());
     }
 
     // ----------------------------------------------------------------
@@ -392,7 +449,7 @@ class BetController extends Controller
         $this->model->delete((int) $id);
 
         $this->setFlash('success', 'Aposta removida.');
-        $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+        $this->redirect($this->betRedirectBack());
     }
 
     // ----------------------------------------------------------------
@@ -414,19 +471,19 @@ class BetController extends Controller
 
         if (!in_array($tipo, ['entrada', 'saque'], true)) {
             $this->setFlash('error', 'Tipo de movimento inválido.');
-            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            $this->redirect($this->betRedirectBack());
             return;
         }
 
         if ($valor <= 0) {
             $this->setFlash('error', 'Informe um valor maior que zero.');
-            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            $this->redirect($this->betRedirectBack());
             return;
         }
 
         if (!$this->isValidDate($data)) {
             $this->setFlash('error', 'Informe uma data válida.');
-            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            $this->redirect($this->betRedirectBack());
             return;
         }
 
@@ -439,7 +496,7 @@ class BetController extends Controller
         ]);
 
         $this->setFlash('success', $tipo === 'entrada' ? 'Entrada registrada na banca!' : 'Saque registrado na banca!');
-        $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+        $this->redirect($this->betRedirectBack());
     }
 
     // ----------------------------------------------------------------
@@ -464,20 +521,20 @@ class BetController extends Controller
 
         if ($descricao === '') {
             $this->setFlash('error', 'Informe a descrição da possível entrada.');
-            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            $this->redirect($this->betRedirectBack());
             return;
         }
 
         if ($odd <= 1) {
             $this->setFlash('error', 'Informe uma odd válida (maior que 1).');
-            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            $this->redirect($this->betRedirectBack());
             return;
         }
 
         $d = \DateTime::createFromFormat('Y-m-d H:i:s', $dataHora);
         if ($d === false || $d->format('Y-m-d H:i:s') !== $dataHora) {
             $this->setFlash('error', 'Informe uma data e hora válidas.');
-            $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+            $this->redirect($this->betRedirectBack());
             return;
         }
 
@@ -490,7 +547,7 @@ class BetController extends Controller
         ]);
 
         $this->setFlash('success', 'Possível entrada registrada!');
-        $this->redirect("/apostas?mes={$mes}&ano={$ano}");
+        $this->redirect($this->betRedirectBack('#betsPossiveisEntradas'));
     }
 
     public function prospectDestroy(string $id): void
@@ -508,7 +565,7 @@ class BetController extends Controller
         $this->prospectModel->delete((int) $id);
 
         $this->setFlash('success', 'Possível entrada removida.');
-        $this->redirect('/apostas');
+        $this->redirect($this->betRedirectBack());
     }
 
     // ----------------------------------------------------------------
@@ -523,7 +580,7 @@ class BetController extends Controller
         $this->linkModel->generateForUser($userId);
 
         $this->setFlash('success', 'Novo link público gerado!');
-        $this->redirect('/apostas');
+        $this->redirect($this->betRedirectBack());
     }
 
     public function revokeShareLink(): void
@@ -534,7 +591,34 @@ class BetController extends Controller
         $this->linkModel->revokeForUser($userId);
 
         $this->setFlash('success', 'Link público revogado.');
-        $this->redirect('/apostas');
+        $this->redirect($this->betRedirectBack());
+    }
+
+    // ----------------------------------------------------------------
+    // Meta mensal (AJAX)
+    // ----------------------------------------------------------------
+
+    public function metaStore(): void
+    {
+        $userId = $this->requireBetAccess();
+        $this->verifyCsrf();
+
+        $mes   = (int) ($_POST['mes'] ?? 0);
+        $ano   = (int) ($_POST['ano'] ?? 0);
+        $valor = $this->parseMoney((string) ($_POST['valor'] ?? '0'));
+
+        if ($mes < 1 || $mes > 12 || $ano < 2000 || $ano > (int) date('Y') + 1) {
+            $this->json(['error' => 'Mês/ano inválidos.'], 400);
+            return;
+        }
+
+        if ($valor <= 0) {
+            $this->metaModel->deleteForUserMonth($userId, $mes, $ano);
+        } else {
+            $this->metaModel->setForUserMonth($userId, $mes, $ano, $valor);
+        }
+
+        $this->json(['success' => true]);
     }
 
     /**
@@ -613,6 +697,23 @@ class BetController extends Controller
         }
 
         return null;
+    }
+
+/**
+     * Redireciona de volta ao painel de apostas preservando os filtros ativos
+     * (mês/ano, intervalo de datas e filtros de possíveis entradas) na URL.
+     */
+    private function betRedirectBack(string $fragment = ''): string
+    {
+        $qs = [];
+        foreach (['mes', 'ano', 'inicio', 'fim', 'prospect_de', 'prospect_ate'] as $k) {
+            $v = $_GET[$k] ?? null;
+            if ($v !== null && $v !== '') {
+                $qs[$k] = $v;
+            }
+        }
+
+        return '/apostas' . (empty($qs) ? '' : '?' . http_build_query($qs)) . $fragment;
     }
 
     private function isValidDate(string $date): bool

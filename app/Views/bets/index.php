@@ -22,6 +22,16 @@ function fmtBetOdd(float $v): string {
 $periodoLabel = date('d/m/Y', strtotime($periodInicio)) . ' a ' . date('d/m/Y', strtotime($periodFim));
 
 $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['token']) : '';
+
+// Query string atual de filtros — usada para preservar os filtros ao submeter
+// formulários POST (aposta, banca, possível entrada, etc.).
+$qsParts = [];
+foreach (['mes', 'ano', 'inicio', 'fim', 'prospect_de', 'prospect_ate'] as $qsKey) {
+    if (isset($_GET[$qsKey]) && $_GET[$qsKey] !== '') {
+        $qsParts[$qsKey] = $_GET[$qsKey];
+    }
+}
+$queryString = http_build_query($qsParts);
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -61,8 +71,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
 
         .bets-topbar {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 14px 28px; background: #0f0f16; border-bottom: 1px solid var(--border);
-            position: sticky; top: 0; z-index: 50;
+            padding: 14px 28px; background: transparent; border-bottom: 1px solid var(--border);
         }
         .bets-topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .3px; }
         .bets-topbar-brand i { color: #a78bfa; text-shadow: 0 0 10px rgba(167,139,250,.6); }
@@ -85,6 +94,8 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
         .bets-hero-label { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 6px; }
         .bets-hero-value { font-size: 44px; font-weight: 800; line-height: 1; }
         .bets-hero-meta { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+        .bets-hero-pendente { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+        .bets-kpi-edit-wrap { margin-top: 8px; margin-bottom: 12px; }
 
         .bets-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 20px; }
         .bets-kpi-card {
@@ -115,6 +126,9 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
         .bets-period-bar .filter-group { flex: 0 0 auto; }
         .bets-period-divider { align-self: flex-end; padding-bottom: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); }
         .bets-period-bar-active { border: 1px solid rgba(139,92,246,.45); border-radius: 14px; padding: 12px 16px; background: rgba(139,92,246,.06); margin-bottom: 16px; }
+
+        /* O tema global oculta .filter-form em telas menores; aqui os filtros da página de apostas ficam sempre visíveis */
+        body.bets-body .filter-form { display: flex; }
 
         .bets-curtain { margin-bottom: 20px; }
         .curtain-toggle {
@@ -197,6 +211,97 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
         .bets-mult-sel ul { margin: 0; padding-left: 18px; }
         .bets-mult-sel li { font-size: 13px; color: var(--text); padding: 2px 0; }
 
+        /* Cabeçalho fixo: topbar + abas de navegação rápida */
+        .bets-header { position: sticky; top: 0; z-index: 60; background: #0f0f16; border-bottom: 1px solid var(--border); }
+        .bets-tabs {
+            display: flex; gap: 6px; padding: 0 28px 12px; overflow-x: auto;
+            scrollbar-width: none; -webkit-overflow-scrolling: touch; flex-wrap: nowrap;
+        }
+        .bets-tabs::-webkit-scrollbar { display: none; }
+        .bets-tab {
+            flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+            padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: all .15s ease; white-space: nowrap;
+        }
+        .bets-tab:hover { color: var(--text); border-color: rgba(139,92,246,.5); }
+        .bets-tab.active { background: rgba(139,92,246,.15); border-color: rgba(139,92,246,.6); color: #c4b5fd; }
+        .bets-tab i { font-size: 12px; }
+
+        /* Âncoras das abas: compensa o cabeçalho fixo no scroll */
+        .bets-anchor { scroll-margin-top: 148px; }
+
+        .bets-charts-grid { grid-template-columns: repeat(2, 1fr); }
+
+        /* Tabelas em modo desktop (ocultas no celular) e cards móveis */
+        .bets-mob-cards { display: none; }
+
+        /* Barra de ações fixa no rodapé (mobile) */
+        .bets-bottombar {
+            display: none;
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 70;
+            background: rgba(15,15,22,.97); backdrop-filter: blur(8px);
+            border-top: 1px solid var(--border);
+            padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+        }
+        .bets-bottombar button {
+            flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+            background: transparent; border: none; color: var(--text-muted);
+            font-size: 10px; font-weight: 600; cursor: pointer; padding: 6px 2px;
+        }
+        .bets-bottombar button i { font-size: 17px; }
+        .bets-bottombar button:hover, .bets-bottombar button:active { color: #c4b5fd; }
+
+        /* Cards móveis (resumo diário e possíveis entradas) */
+        .bets-mob-cards { flex-direction: column; gap: 12px; padding: 14px; }
+        .bets-mob-card {
+            background: #101018; border: 1px solid var(--border); border-radius: 14px;
+            padding: 14px; display: flex; flex-direction: column; gap: 10px;
+            box-shadow: 0 0 18px rgba(0,0,0,.3);
+        }
+        .bets-mob-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .bets-mob-date { font-weight: 700; font-size: 14px; }
+        .bets-mob-desc { font-weight: 600; font-size: 14px; line-height: 1.4; }
+        .bets-mob-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .bets-mob-grid > div {
+            background: rgba(255,255,255,.03); border: 1px solid var(--border);
+            border-radius: 10px; padding: 8px 4px; text-align: center;
+        }
+        .bets-mob-grid span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); margin-bottom: 4px; }
+        .bets-mob-grid strong { font-size: 15px; }
+        .bets-mob-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+        .bets-mob-lbl { color: var(--text-muted); font-size: 12px; }
+
+        @media (max-width: 768px) {
+            .bets-tabs { padding: 0 14px 10px; }
+            .bets-topbar { padding: 12px 14px; }
+            .bets-topbar-brand span { font-size: 14px; }
+            .bets-user-chip { display: none; }
+            .bets-topbar-link span { display: none; }
+
+            .bets-wrapper { padding: 16px 14px 110px; }
+            .bets-hero { padding: 20px; }
+            .bets-hero-value { font-size: 34px; }
+            .bets-hero > div:last-child { text-align: left !important; }
+
+            .bets-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+            .bets-kpi-value { font-size: 22px; }
+            .bets-kpi-card { padding: 16px; }
+            .bets-charts-grid { grid-template-columns: 1fr; }
+
+            .bets-tbl-desktop { display: none; }
+            .bets-mob-cards { display: flex; }
+
+            .bets-bottombar { display: flex; }
+            .bets-anchor { scroll-margin-top: 168px; }
+        }
+
+        @media (max-width: 420px) {
+            .bets-hero-value { font-size: 30px; }
+            .bets-filtros .filter-form,
+            .filter-form { flex-wrap: wrap; }
+        }
+
         @media (max-width: 640px) {
             #modalStatement .modal-dialog,
             #modalDay .modal-dialog { max-width: 100%; }
@@ -205,13 +310,21 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
 </head>
 <body class="bets-body">
 
-<div class="bets-topbar">
-    <div class="bets-topbar-brand"><i class="fa-solid fa-dice"></i> Gerenciamento de Apostas</div>
-    <div class="bets-topbar-right">
-        <span class="bets-user-chip"><?= htmlspecialchars($usr['nome'] ?? '') ?></span>
-        <a href="<?= $basePath ?>/dashboard"><i class="fa-solid fa-arrow-left"></i> Voltar ao sistema</a>
-        <a href="<?= $basePath ?>/logout"><i class="fa-solid fa-right-from-bracket"></i> Sair</a>
+<div class="bets-header">
+    <div class="bets-topbar">
+        <div class="bets-topbar-brand"><i class="fa-solid fa-dice"></i> <span>Gerenciamento de Apostas</span></div>
+        <div class="bets-topbar-right">
+            <span class="bets-user-chip"><?= htmlspecialchars($usr['nome'] ?? '') ?></span>
+            <a class="bets-topbar-link" href="<?= $basePath ?>/dashboard"><i class="fa-solid fa-arrow-left"></i> <span>Voltar ao sistema</span></a>
+            <a class="bets-topbar-link" href="<?= $basePath ?>/logout"><i class="fa-solid fa-right-from-bracket"></i> <span>Sair</span></a>
+        </div>
     </div>
+    <nav class="bets-tabs" id="betsTabs" aria-label="Navegação rápida do painel">
+        <button type="button" class="bets-tab" data-target="betsResumoDiario"><i class="fa-solid fa-calendar-days"></i> Resumo Diário</button>
+        <button type="button" class="bets-tab" data-target="betsIndicadores"><i class="fa-solid fa-chart-pie"></i> Indicadores</button>
+        <button type="button" class="bets-tab" data-target="betsPossiveisEntradas"><i class="fa-solid fa-magnifying-glass-chart"></i> Possíveis Entradas</button>
+        <button type="button" class="bets-tab" data-target="betsGraficos"><i class="fa-solid fa-chart-line"></i> Gráficos</button>
+    </nav>
 </div>
 
 <div class="bets-wrapper">
@@ -273,7 +386,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
     <!-- ================================================================
          Saldo da banca — destaque
     ================================================================ -->
-    <div class="bets-hero">
+    <div class="bets-hero bets-anchor" id="betsIndicadores">
         <div>
             <div class="bets-hero-label">Saldo Final do Período</div>
             <div class="bets-hero-value <?= $saldoPeriodo >= 0 ? 'neon-green' : 'neon-red' ?>">
@@ -286,6 +399,13 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
         </div>
         <div style="text-align:right">
             <div class="bets-hero-meta"><?= $kpis['qtd_pendentes'] ?> pendente(s) · <?= $kpis['qtd_reembolsos'] ?> reembolso(s)</div>
+            <?php if ($pendentes['total_apostado'] > 0): ?>
+            <div class="bets-hero-pendente">
+                <i class="fa-solid fa-hourglass-half"></i>
+                Pendentes: <strong class="neon-amber"><?= fmtBetMoney($pendentes['total_apostado']) ?></strong> apostado
+                · possível retorno <strong class="neon-amber"><?= fmtBetMoney($pendentes['total_retorno']) ?></strong>
+            </div>
+            <?php endif; ?>
             <button class="btn btn-primary btn-sm mt-2" onclick="openModal('modalBank')">
                 <i class="fa-solid fa-wallet"></i> Movimentar Banca
             </button>
@@ -316,7 +436,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
             <div class="bets-kpi-value neon-green"><?= fmtBetMoney($kpis['retorno_liquido']) ?></div>
             <div class="bets-kpi-label">Retorno Líquido Total (<?= $kpis['qtd_vitorias'] ?> vitória(s))</div>
             <div class="bets-kpi-sub">
-                <span>Média por aposta vencedora</span>
+                <span>Média de retorno líquido por aposta vencida</span>
                 <strong><?= fmtBetMoney($kpis['media_retorno']) ?></strong>
             </div>
         </div>
@@ -326,14 +446,14 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
             <div class="bets-kpi-value neon-red"><?= fmtBetMoney($kpis['total_perda']) ?></div>
             <div class="bets-kpi-label">Total de Perda (<?= $kpis['qtd_derrotas'] ?> derrota(s))</div>
             <div class="bets-kpi-sub">
-                <span>Média por aposta perdida</span>
+                <span>Média de perda por aposta perdida</span>
                 <strong><?= fmtBetMoney($kpis['media_perda']) ?></strong>
             </div>
         </div>
 
     </div>
 
-    <div class="bets-kpi-grid" style="grid-template-columns: repeat(3, 1fr)">
+    <div class="bets-kpi-grid">
         <div class="bets-kpi-card kpi-blue">
             <div class="bets-kpi-icon neon-blue"><i class="fa-solid fa-money-bill-transfer"></i></div>
             <div class="bets-kpi-value neon-blue"><?= fmtBetMoney($mov['entradas'] - $mov['saques']) ?></div>
@@ -358,15 +478,57 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 <span>Variação sobre saldo inicial</span>
                 <strong><?= $balancoPct === null ? '—' : ($balancoPct > 0 ? '+' : '') . number_format($balancoPct, 1, ',', '.') . '%' ?></strong>
             </div>
+            <div class="bets-kpi-sub">
+                <span>Balanço médio por dia jogado</span>
+                <strong class="<?= $balancoDia === null ? '' : ($balancoDia >= 0 ? 'neon-green' : 'neon-red') ?>">
+                    <?= $balancoDia === null ? '—' : ($balancoDia >= 0 ? '+ ' : '- ') . fmtBetMoney($balancoDia) ?>
+                </strong>
+            </div>
         </div>
 
         <div class="bets-kpi-card kpi-amber">
-            <div class="bets-kpi-icon neon-amber"><i class="fa-solid fa-hourglass-half"></i></div>
-            <div class="bets-kpi-value neon-amber"><?= fmtBetMoney($pendentes['total_apostado']) ?></div>
-            <div class="bets-kpi-label">Apostas Pendentes (<?= $kpis['qtd_pendentes'] ?>)</div>
+            <div class="bets-kpi-icon neon-amber"><i class="fa-solid fa-bullseye"></i></div>
+            <div class="bets-kpi-label">Meta Mensal — <?= $meses[$mes] ?>/<?= $ano ?></div>
+            <div class="bets-kpi-value neon-amber" id="metaValorText">
+                <?= $metaValor !== null ? fmtBetMoney($metaValor) : 'Definir' ?>
+            </div>
+            <div class="bets-kpi-edit-wrap" id="metaEditWrap" style="display:none">
+                <input type="text" class="form-control form-control-sm currency-input" id="metaValorInput"
+                       value="<?= $metaValor !== null ? number_format($metaValor, 2, ',', '.') : '' ?>"
+                       placeholder="Ex: 500,00">
+                <div class="mt-2">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="saveMeta()"><i class="fa-solid fa-check"></i> Salvar</button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="toggleMetaEdit(false)">Cancelar</button>
+                </div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm mt-2" id="metaEditToggle" onclick="toggleMetaEdit(true)">
+                <i class="fa-solid fa-pen"></i> <?= $metaValor !== null ? 'Editar meta' : 'Definir meta' ?>
+            </button>
             <div class="bets-kpi-sub">
-                <span>Possível retorno</span>
-                <strong class="neon-amber"><?= fmtBetMoney($pendentes['total_retorno']) ?></strong>
+                <span>Balanço do mês</span>
+                <strong class="<?= $metaBalanco >= 0 ? 'neon-green' : 'neon-red' ?>">
+                    <?= $metaBalanco >= 0 ? '+ ' : '- ' ?><?= fmtBetMoney($metaBalanco) ?>
+                </strong>
+            </div>
+            <div class="bets-kpi-sub">
+                <span>Faltam para a meta</span>
+                <?php if ($metaValor === null): ?>
+                    <strong>—</strong>
+                <?php elseif ($metaAtingida): ?>
+                    <strong class="neon-green"><i class="fa-solid fa-circle-check"></i> Meta atingida</strong>
+                <?php else: ?>
+                    <strong class="neon-red"><?= fmtBetMoney($metaFaltante) ?></strong>
+                <?php endif; ?>
+            </div>
+            <div class="bets-kpi-sub">
+                <span>Por dia (<?= $metaDias ?> dia(s) restante(s))</span>
+                <?php if ($metaValor === null || $metaDiario === null): ?>
+                    <strong>—</strong>
+                <?php elseif ($metaAtingida): ?>
+                    <strong class="neon-green"><i class="fa-solid fa-circle-check"></i> Concluída</strong>
+                <?php else: ?>
+                    <strong class="neon-red">+ <?= fmtBetMoney($metaDiario) ?></strong>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -401,7 +563,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
     <!-- ================================================================
          Possíveis Entradas — levantamento antes de apostar
     ================================================================ -->
-    <div class="bets-daily-card">
+    <div class="bets-daily-card bets-anchor" id="betsPossiveisEntradas">
         <div class="card-header">
             <h3 class="card-title"><i class="fa-solid fa-magnifying-glass-chart"></i> Possíveis Entradas</h3>
             <button class="btn btn-ghost btn-sm" onclick="openModal('modalProspect')">
@@ -435,7 +597,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 <p>Nenhuma possível entrada cadastrada. Use este espaço para levantar oportunidades antes de apostar.</p>
             </div>
             <?php else: ?>
-            <div class="table-responsive">
+            <div class="table-responsive bets-tbl-desktop">
                 <table class="table table-hover">
                     <thead>
                         <tr>
@@ -484,6 +646,48 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                     </tbody>
                 </table>
             </div>
+
+            <!-- Versão móvel: Possíveis Entradas em cards -->
+            <div class="bets-mob-cards">
+                <?php foreach ($prospects as $p):
+                    $convertido = !empty($p['aposta_status']);
+                    $statusNome = $convertido
+                        ? ($statusLabels[$p['aposta_status']][0] ?? $p['aposta_status'])
+                        : 'Em análise';
+                    $statusCls  = $convertido
+                        ? ($statusLabels[$p['aposta_status']][1] ?? 'badge-secondary')
+                        : 'badge-secondary';
+                ?>
+                <div class="bets-mob-card">
+                    <div class="bets-mob-head">
+                        <span class="bets-mob-date"><?= date('d/m/Y H:i', strtotime((string) $p['data_hora'])) ?></span>
+                        <button class="action-btn action-btn-danger" title="Excluir" onclick="deleteProspect(<?= (int) $p['id'] ?>)">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="bets-mob-desc"><?= htmlspecialchars((string) $p['descricao']) ?></div>
+                    <div class="bets-mob-row"><span class="bets-mob-lbl">Categoria</span><span><?= htmlspecialchars((string) ($p['categoria_nome'] ?? '-')) ?></span></div>
+                    <div class="bets-mob-row"><span class="bets-mob-lbl">Odd</span><strong><?= fmtBetOdd((float) $p['odd']) ?></strong></div>
+                    <div class="bets-mob-row">
+                        <span class="bets-mob-lbl">Status</span>
+                        <?php if ($convertido): ?>
+                        <span class="badge <?= $statusCls ?>"><i class="fa-solid fa-link"></i> <?= $statusNome ?></span>
+                        <?php else: ?>
+                        <span class="badge <?= $statusCls ?>"><?= $statusNome ?></span>
+                        <?php endif; ?>
+                    </div>
+                    <label class="bets-mob-row">
+                        <span class="bets-mob-lbl">Selecionar</span>
+                        <input type="checkbox" class="prospect-check" onchange="updateProspectCombo()"
+                               data-id="<?= (int) $p['id'] ?>"
+                               data-descricao="<?= htmlspecialchars((string) $p['descricao']) ?>"
+                               data-categoria-id="<?= (int) ($p['categoria_id'] ?? 0) ?>"
+                               data-odd="<?= number_format((float) $p['odd'], 3, '.', '') ?>"
+                               <?= $convertido ? 'disabled title="Já convertida em aposta"' : '' ?>>
+                    </label>
+                </div>
+                <?php endforeach; ?>
+            </div>
             <?php endif; ?>
         </div>
         <div class="bets-prospect-footer">
@@ -499,7 +703,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
     <!-- ================================================================
          Totais dia a dia
     ================================================================ -->
-    <div class="bets-daily-card" style="margin-top:20px">
+    <div class="bets-daily-card bets-anchor" id="betsResumoDiario" style="margin-top:20px">
         <div class="card-header">
             <h3 class="card-title"><i class="fa-solid fa-calendar-days"></i> Totais Diários</h3>
             <span class="card-subtitle"><?= $periodoLabel ?></span>
@@ -511,7 +715,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 <p>Nenhuma aposta registrada no período selecionado.</p>
             </div>
             <?php else: ?>
-            <div class="table-responsive">
+            <div class="table-responsive bets-tbl-desktop">
                 <table class="table table-hover">
                     <thead>
                         <tr>
@@ -522,12 +726,17 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                             <th class="text-right">Total Apostado</th>
                             <th class="text-right">Saldo Final</th>
                             <th class="text-center">Vs. dia anterior</th>
+                            <th class="text-right">Meta do dia</th>
+                            <th class="text-center">Vs. meta</th>
                             <th class="text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($daily as $d):
-                            $comp = $d['comparativo'];
+                            $comp     = $d['comparativo'];
+                            $metaInfo = $metaDiaMap[(string) $d['data']] ?? null;
+                            $metaDia  = $metaInfo['meta'] ?? null;
+                            $metaPct  = $metaInfo['pct'] ?? null;
                         ?>
                         <tr>
                             <td class="font-medium"><?= date('d/m/Y', strtotime((string) $d['data'])) ?></td>
@@ -549,6 +758,18 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                                 <span class="bets-compare flat"><i class="fa-solid fa-equals"></i> R$ 0,00</span>
                                 <?php endif; ?>
                             </td>
+                            <td class="text-right text-sm text-muted">
+                                <?= $metaDia === null ? '—' : fmtBetMoney((float) $metaDia) ?>
+                            </td>
+                            <td class="text-center">
+                                <?php if ($metaPct === null): ?>
+                                <span class="bets-compare flat"><i class="fa-solid fa-minus"></i> —</span>
+                                <?php elseif ((float) $metaPct >= 100): ?>
+                                <span class="bets-compare up"><i class="fa-solid fa-arrow-trend-up"></i> +<?= number_format((float) $metaPct - 100, 0, ',', '.') ?>%</span>
+                                <?php else: ?>
+                                <span class="bets-compare down"><i class="fa-solid fa-arrow-trend-down"></i> -<?= number_format(100 - (float) $metaPct, 0, ',', '.') ?>%</span>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-center">
                                 <button class="action-btn action-btn-primary" title="Ver detalhes"
                                         onclick="openDayModal('<?= htmlspecialchars((string) $d['data']) ?>')">
@@ -560,6 +781,66 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                     </tbody>
                 </table>
             </div>
+
+            <!-- Versão móvel: Totais Diários em cards -->
+            <div class="bets-mob-cards">
+                <?php foreach ($daily as $d):
+                    $comp     = $d['comparativo'];
+                    $metaInfo = $metaDiaMap[(string) $d['data']] ?? null;
+                    $metaDia  = $metaInfo['meta'] ?? null;
+                    $metaPct  = $metaInfo['pct'] ?? null;
+                    $saldoDia = (float) $d['saldo'];
+                    $qtdDa    = (int) $d['qtd'];
+                ?>
+                <div class="bets-mob-card">
+                    <div class="bets-mob-head">
+                        <span class="bets-mob-date"><?= date('d/m/Y', strtotime((string) $d['data'])) ?></span>
+                        <button class="action-btn action-btn-primary" title="Ver detalhes"
+                                onclick="openDayModal('<?= htmlspecialchars((string) $d['data']) ?>')">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
+                    <div class="bets-mob-grid">
+                        <div><span>Apostas</span><strong><?= $qtdDa ?></strong></div>
+                        <div><span>Vitórias</span><strong class="neon-green"><?= (int) $d['vitorias'] ?></strong></div>
+                        <div><span>Derrotas</span><strong class="neon-red"><?= (int) $d['derrotas'] ?></strong></div>
+                        <div><span>Apostado</span><strong><?= fmtBetMoney((float) $d['total_apostado']) ?></strong></div>
+                    </div>
+                    <div class="bets-mob-row">
+                        <span class="bets-mob-lbl">Saldo final</span>
+                        <strong class="<?= $saldoDia >= 0 ? 'neon-green' : 'neon-red' ?>">
+                            <?= $saldoDia >= 0 ? '+' : '-' ?> <?= fmtBetMoney($saldoDia) ?>
+                        </strong>
+                    </div>
+                    <div class="bets-mob-row">
+                        <span class="bets-mob-lbl">Vs. dia anterior</span>
+                        <?php if ($comp === null): ?>
+                        <span class="bets-compare flat"><i class="fa-solid fa-minus"></i> —</span>
+                        <?php elseif ((float) $comp > 0): ?>
+                        <span class="bets-compare up"><i class="fa-solid fa-caret-up"></i> <?= fmtBetMoney((float) $comp) ?></span>
+                        <?php elseif ((float) $comp < 0): ?>
+                        <span class="bets-compare down"><i class="fa-solid fa-caret-down"></i> <?= fmtBetMoney((float) $comp) ?></span>
+                        <?php else: ?>
+                        <span class="bets-compare flat"><i class="fa-solid fa-equals"></i> R$ 0,00</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="bets-mob-row">
+                        <span class="bets-mob-lbl">Meta do dia</span>
+                        <strong><?= $metaDia === null ? '—' : fmtBetMoney((float) $metaDia) ?></strong>
+                    </div>
+                    <div class="bets-mob-row">
+                        <span class="bets-mob-lbl">Vs. meta</span>
+                        <?php if ($metaPct === null): ?>
+                        <span class="bets-compare flat"><i class="fa-solid fa-minus"></i> —</span>
+                        <?php elseif ((float) $metaPct >= 100): ?>
+                        <span class="bets-compare up"><i class="fa-solid fa-arrow-trend-up"></i> +<?= number_format((float) $metaPct - 100, 0, ',', '.') ?>%</span>
+                        <?php else: ?>
+                        <span class="bets-compare down"><i class="fa-solid fa-arrow-trend-down"></i> -<?= number_format(100 - (float) $metaPct, 0, ',', '.') ?>%</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
             <?php endif; ?>
         </div>
     </div>
@@ -567,7 +848,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
     <!-- ================================================================
          Gráficos
     ================================================================ -->
-    <div class="bets-kpi-grid" style="grid-template-columns: repeat(2, 1fr); margin-top:20px">
+    <div class="bets-kpi-grid bets-charts-grid bets-anchor" id="betsGraficos" style="margin-top:20px">
         <div class="bets-daily-card">
             <div class="card-header">
                 <h3 class="card-title"><i class="fa-solid fa-chart-line"></i> Evolução Diária</h3>
@@ -597,7 +878,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 <h3 class="modal-title"><i class="fa-solid fa-plus-circle"></i> Nova Aposta Simples</h3>
                 <button class="modal-close" onclick="closeModal('modalBetSimple')"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <form method="POST" action="<?= $basePath ?>/apostas/simples">
+            <form method="POST" action="<?= $basePath ?>/apostas/simples<?= $queryString !== '' ? '?' . htmlspecialchars($queryString) : '' ?>">
                 <div class="modal-body">
                     <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
                     <input type="hidden" name="mes_url" value="<?= $mes ?>">
@@ -674,7 +955,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 <h3 class="modal-title"><i class="fa-solid fa-layer-group"></i> Nova Aposta Múltipla</h3>
                 <button class="modal-close" onclick="closeModal('modalBetMultiple')"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <form method="POST" action="<?= $basePath ?>/apostas/multipla" id="multipleBetForm">
+            <form method="POST" action="<?= $basePath ?>/apostas/multipla<?= $queryString !== '' ? '?' . htmlspecialchars($queryString) : '' ?>" id="multipleBetForm">
                 <div class="modal-body">
                     <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
                     <input type="hidden" name="mes_url" value="<?= $mes ?>">
@@ -750,7 +1031,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 <h3 class="modal-title"><i class="fa-solid fa-wallet"></i> Movimentar Banca</h3>
                 <button class="modal-close" onclick="closeModal('modalBank')"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <form method="POST" action="<?= $basePath ?>/apostas/banca">
+            <form method="POST" action="<?= $basePath ?>/apostas/banca<?= $queryString !== '' ? '?' . htmlspecialchars($queryString) : '' ?>">
                 <div class="modal-body">
                     <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
                     <input type="hidden" name="mes_url" value="<?= $mes ?>">
@@ -907,7 +1188,7 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 <h3 class="modal-title"><i class="fa-solid fa-magnifying-glass-chart"></i> Nova Possível Entrada</h3>
                 <button class="modal-close" onclick="closeModal('modalProspect')"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <form method="POST" action="<?= $basePath ?>/apostas/prospectos">
+            <form method="POST" action="<?= $basePath ?>/apostas/prospectos<?= $queryString !== '' ? '?' . htmlspecialchars($queryString) : '' ?>">
                 <div class="modal-body">
                     <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
                     <input type="hidden" name="mes_url" value="<?= $mes ?>">
@@ -968,12 +1249,12 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
                 <?php endif; ?>
             </div>
             <div class="modal-footer">
-                <form method="POST" action="<?= $basePath ?>/apostas/link/gerar">
+                <form method="POST" action="<?= $basePath ?>/apostas/link/gerar<?= $queryString !== '' ? '?' . htmlspecialchars($queryString) : '' ?>">
                     <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
                     <button type="submit" class="btn btn-primary btn-sm"><i class="fa-solid fa-rotate"></i> Gerar Novo Link</button>
                 </form>
                 <?php if ($shareUrl): ?>
-                <form method="POST" action="<?= $basePath ?>/apostas/link/revogar">
+                <form method="POST" action="<?= $basePath ?>/apostas/link/revogar<?= $queryString !== '' ? '?' . htmlspecialchars($queryString) : '' ?>">
                     <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrf) ?>">
                     <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-ban"></i> Revogar</button>
                 </form>
@@ -984,12 +1265,23 @@ $shareUrl = $shareLink ? ($basePath . '/apostas/compartilhado/' . $shareLink['to
 
 </div><!-- /.bets-wrapper -->
 
+<!-- Barra de ações fixa no rodapé (mobile) -->
+<nav class="bets-bottombar" id="betsBottomBar" aria-label="Ações rápidas">
+    <button type="button" onclick="openModal('modalBetSimple')"><i class="fa-solid fa-plus"></i><span>Simples</span></button>
+    <button type="button" onclick="openModal('modalBetMultiple')"><i class="fa-solid fa-layer-group"></i><span>Múltipla</span></button>
+    <button type="button" onclick="openModal('modalBank')"><i class="fa-solid fa-wallet"></i><span>Banca</span></button>
+    <button type="button" onclick="openModal('modalProspect')"><i class="fa-solid fa-magnifying-glass-chart"></i><span>Possível</span></button>
+    <button type="button" onclick="openModal('modalStatement')"><i class="fa-solid fa-file-invoice"></i><span>Extrato</span></button>
+</nav>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="<?= $basePath ?>/js/masks.js"></script>
 <script src="<?= $basePath ?>/js/app.js"></script>
 <script>
 const APOSTAS_BASE = '<?= $basePath ?>';
 const APOSTAS_CSRF = '<?= htmlspecialchars($csrf) ?>';
+const BET_QUERY = '<?= htmlspecialchars($queryString) ?>';
+function betUrl(path) { return APOSTAS_BASE + path + (BET_QUERY ? (path.includes('?') ? '&' : '?') + BET_QUERY : ''); }
 const APOSTAS_STATUS_LABELS = {
     pendente:  ['Pendente',  'badge-warning'],
     vitoria:   ['Vitória',   'badge-success'],
@@ -1321,7 +1613,7 @@ function deleteBet(betId) {
     if (!confirm('Deseja realmente excluir esta aposta?')) return;
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = `${APOSTAS_BASE}/apostas/${betId}/excluir`;
+    form.action = betUrl(`/apostas/${betId}/excluir`);
     form.innerHTML = `<input type="hidden" name="_csrf" value="${APOSTAS_CSRF}">`;
     document.body.appendChild(form);
     form.submit();
@@ -1399,7 +1691,7 @@ function deleteProspect(id) {
     if (!confirm('Deseja realmente excluir esta possível entrada?')) return;
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = `${APOSTAS_BASE}/apostas/prospectos/${id}/excluir`;
+    form.action = betUrl(`/apostas/prospectos/${id}/excluir`);
     form.innerHTML = `<input type="hidden" name="_csrf" value="${APOSTAS_CSRF}">`;
     document.body.appendChild(form);
     form.submit();
@@ -1524,6 +1816,89 @@ if (typeof Chart !== 'undefined') {
         });
     }
 }
+
+// ------------------------------------------------------------
+// Meta mensal (edição inline via AJAX)
+// ------------------------------------------------------------
+const META_MES = <?= (int) $mes ?>;
+const META_ANO = <?= (int) $ano ?>;
+
+function toggleMetaEdit(show) {
+    document.getElementById('metaEditWrap').style.display = show ? 'block' : 'none';
+    document.getElementById('metaEditToggle').style.display = show ? 'none' : 'inline-block';
+    if (show) {
+        const input = document.getElementById('metaValorInput');
+        input.focus();
+        input.select();
+    }
+}
+
+function saveMeta() {
+    const input = document.getElementById('metaValorInput');
+    if (input.value.trim() === '') {
+        input.value = '0';
+    }
+
+    const body = new URLSearchParams();
+    body.append('_csrf', APOSTAS_CSRF);
+    body.append('mes', META_MES);
+    body.append('ano', META_ANO);
+    body.append('valor', input.value.trim());
+
+    fetch(`${APOSTAS_BASE}/apostas/meta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Erro ao salvar a meta.');
+        }
+    })
+    .catch(() => alert('Erro ao salvar a meta.'));
+}
+
+// ------------------------------------------------------------
+// Abas de navegação rápida (desktop e mobile)
+// ------------------------------------------------------------
+(function () {
+    const tabs = Array.from(document.querySelectorAll('.bets-tab'));
+
+    function setActiveTab(target) {
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.target === target));
+    }
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', function () {
+            const el = document.getElementById(this.dataset.target);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                setActiveTab(this.dataset.target);
+            }
+        });
+    });
+
+    // Scroll-spy: marca a aba da seção atualmente em tela
+    function onScroll() {
+        const headerOffset = window.innerWidth <= 768 ? 170 : 150;
+        let current = '';
+        for (const tab of tabs) {
+            const el = document.getElementById(tab.dataset.target);
+            if (el && el.getBoundingClientRect().top <= headerOffset) {
+                current = tab.dataset.target;
+            }
+        }
+        if (current) {
+            setActiveTab(current);
+        }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+})();
 </script>
 </body>
 </html>

@@ -256,6 +256,25 @@ class Bet extends Model
     }
 
     /**
+     * Última data com aposta registrada em um mês/ano (usada como referência para
+     * os dias restantes no cálculo da média diária da meta mensal).
+     */
+    public function getLastBetDate(int $userId, int $mes, int $ano): ?string
+    {
+        $inicio = sprintf('%04d-%02d-01', $ano, $mes);
+        $fim    = date('Y-m-t', strtotime($inicio));
+
+        $row = $this->db->fetch(
+            "SELECT MAX(`data_aposta`) AS ultima
+             FROM `{$this->table}`
+             WHERE `usuario_id` = ? AND `data_aposta` BETWEEN ? AND ?",
+            [$userId, $inicio, $fim]
+        );
+
+        return ($row['ultima'] ?? null) !== null ? (string) $row['ultima'] : null;
+    }
+
+    /**
      * Resultado líquido de todas as apostas já resolvidas do usuário (histórico completo),
      * usado para compor o saldo real da banca junto às entradas/saques manuais.
      */
