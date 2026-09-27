@@ -14,18 +14,34 @@ class InstallmentDebt extends Model
     protected string $table = 'dividas_parceladas';
 
     /**
+     * Lista as dívidas do usuário.
+     *
+     * @param string $order 'recentes' (mais atualizadas primeiro, padrão) ou
+     *                      'proximas' (mais perto de finalizar primeiro e,
+     *                      no empate, maior valor de parcela). Dívidas já
+     *                      quitadas continuam agrupadas no fim em ambos.
+     *
      * @return array<int,array<string,mixed>>
      */
-    public function findByUser(int $userId, bool $onlyActive = false): array
+    public function findByUser(int $userId, bool $onlyActive = false, string $order = 'recentes'): array
     {
         $where = $onlyActive ? 'AND d.ativo = 1 AND d.parcelas_pagas < d.total_parcelas' : '';
+
+        // cláusula vinda de uma lista fechada, nunca da requisição
+        $orderBy = match ($order) {
+            'proximas' => 'd.ativo DESC,'
+                . ' GREATEST(d.total_parcelas - d.parcelas_pagas, 0) ASC,'
+                . ' d.valor_parcela DESC,'
+                . ' d.id DESC',
+            default => 'd.ativo DESC, d.updated_at DESC, d.id DESC',
+        };
 
         return $this->db->fetchAll(
             "SELECT d.*,
                     (d.total_parcelas - d.parcelas_pagas) AS parcelas_abertas
              FROM `{$this->table}` d
              WHERE d.usuario_id = ? {$where}
-             ORDER BY d.ativo DESC, d.updated_at DESC, d.id DESC",
+             ORDER BY {$orderBy}",
             [$userId]
         );
     }
@@ -213,63 +229,317 @@ class InstallmentDebt extends Model
 
     /**
      * Demonstrativo mês a mês das parcelas em aberto, por dívida, com total geral por mês.
-     * O horizonte é limitado a $months, mas termina antes se todas as dívidas já
-     * estiverem quitadas dentro do período.
+     * O horizonte é limitado a $months e as colunas começam em $startYm (mês atual
+     * por padrão). $startYm usa a chave canônica 'Y-m' (ex.: '2026-09').
+     * Colunas só existem para meses que de fato têm parcelas a pagar.
      *
-     * @return array{labels: array<int,string>, rows: array<int,array{descricao:string, values: array<int,float>, total: float}>, totals: array<int,float>}
+     * @return array{labels: array<int,string>, rows: array<int,array{descricao:string, values: array<int,float>, total: float}>, totals: array<int,float>, startYm: string}
      */
-    public function getForecastMatrix(int $userId, int $months = 12): array
+    public function getForecastMatrix(int $userId, int $months = 12, ?string $startYm = null): array
     {
-        $debts = $this->db->fetchAll(
-            "SELECT id, descricao, valor_parcela, total_parcelas, parcelas_pagas
-             FROM `{$this->table}`
-             WHERE usuario_id = ? AND ativo = 1 AND parcelas_pagas < total_parcelas
-             ORDER BY descricao",
-            [$userId]
-        );
+        $startYm = $startYm ?? (new \DateTimeImmutable('first day of this month'))->format('Y-m');
 
-        if (empty($debts)) {
-            return ['labels' => [], 'rows' => [], 'totals' => []];
+        $schedule = $this->buildOpenSchedule($userId);
+        if (empty($schedule)) {
+            return ['labels' => [], 'rows' => [], 'totals' => [], 'startYm' => $startYm];
         }
 
-        $maxAbertas = 0;
-        foreach ($debts as $debt) {
-            $abertas = (int) $debt['total_parcelas'] - (int) $debt['parcelas_pagas'];
-            $maxAbertas = max($maxAbertas, $abertas);
+        $ymSet = [];
+        foreach ($schedule as $debt) {
+            foreach ($debt['yms'] as $ym) {
+                if ($ym >= $startYm) {
+                    $ymSet[$ym] = true;
+                }
+            }
         }
-        $totalMonths = min($months, max(1, $maxAbertas));
 
-        $start = new \DateTimeImmutable('first day of this month');
+        $yms = array_keys($ymSet);
+        sort($yms);
+        $yms = array_slice($yms, 0, max(1, (int) $months));
+
+        // nenhuma parcela em aberto a partir de $startYm: evita devolver linhas
+        // degeneradas (sem colunas) para a view
+        if ($yms === []) {
+            return ['labels' => [], 'rows' => [], 'totals' => [], 'startYm' => $startYm];
+        }
+
         $labels = [];
-        for ($i = 0; $i < $totalMonths; $i++) {
-            $labels[] = $start->modify("+{$i} months")->format('m/Y');
+        $index  = [];
+        foreach ($yms as $i => $ym) {
+            $labels[] = $this->ymToDate($ym)->format('m/Y');
+            $index[$ym] = $i;
         }
 
-        $rows = [];
+        $totalMonths = count($labels);
+        $rows   = [];
         $totals = array_fill(0, $totalMonths, 0.0);
 
-        foreach ($debts as $debt) {
-            $abertas = (int) $debt['total_parcelas'] - (int) $debt['parcelas_pagas'];
-            $valor   = (float) $debt['valor_parcela'];
-
-            $values = [];
-            for ($i = 0; $i < $totalMonths; $i++) {
-                $values[$i] = $i < $abertas ? round($valor, 2) : 0.0;
-                $totals[$i] += $values[$i];
+        foreach ($schedule as $debt) {
+            $values = array_fill(0, $totalMonths, 0.0);
+            foreach ($debt['yms'] as $ym) {
+                if (!isset($index[$ym])) {
+                    continue;
+                }
+                $values[$index[$ym]] = round($debt['valor'], 2);
+                $totals[$index[$ym]] += $debt['valor'];
             }
 
             $rows[] = [
-                'descricao' => (string) $debt['descricao'],
+                'descricao' => $debt['descricao'],
                 'values'    => $values,
                 'total'     => round(array_sum($values), 2),
             ];
         }
 
         return [
-            'labels' => $labels,
-            'rows'   => $rows,
-            'totals' => array_map(fn ($v) => round($v, 2), $totals),
+            'labels'  => $labels,
+            'rows'    => $rows,
+            'totals'  => array_map(fn ($v) => round($v, 2), $totals),
+            'startYm' => $startYm,
         ];
+    }
+
+    /**
+     * Projeção do endividamento para um período de referência (mês/ano do filtro).
+     *
+     * - Período atual ou futuro: assume pagamento em dia de todas as parcelas
+     *   vencidas até o fim do período e devolve o saldo restante.
+     * - Período passado: reconstrói o saldo que existia no fim daquele mês
+     *   somando os pagamentos posteriores e removendo as dívidas criadas depois.
+     *
+     * @return array{saldo: float, ehAtual: bool, ehFuturo: bool, ehPassado: bool, delta: float, deltaPercent: float, dueInPeriod: float, parcelasPeriodo: int, dueInPreviousPeriod: float, deltaPeriod: float, dueUntilPeriod: float, parcelasAtePeriodo: int}
+     */
+    public function getPeriodProjection(int $userId, int $mes, int $ano): array
+    {
+        $nowYm    = (new \DateTimeImmutable('first day of this month'))->format('Y-m');
+        $targetYm = sprintf('%04d-%02d', $ano, $mes);
+        $prevYm   = $this->ymToDate($targetYm)->modify('-1 month')->format('Y-m');
+
+        $outstanding = $this->getTotalOutstanding($userId);
+        $buckets     = $this->getOpenScheduleBuckets($userId);
+
+        $dueInPeriod       = (float) ($buckets[$targetYm]['total'] ?? 0.0);
+        $parcelasPeriodo   = (int) ($buckets[$targetYm]['qtd'] ?? 0);
+        $dueInPrevPeriod   = (float) ($buckets[$prevYm]['total'] ?? 0.0);
+
+        $dueUntilPeriod    = 0.0;
+        $parcelasAtePeriod = 0;
+        foreach ($buckets as $ym => $bucket) {
+            if ($ym < $nowYm || $ym > $targetYm) {
+                continue;
+            }
+            $dueUntilPeriod    += $bucket['total'];
+            $parcelasAtePeriod += $bucket['qtd'];
+        }
+
+        $ehFuturo  = $targetYm > $nowYm;
+        $ehAtual   = $targetYm === $nowYm;
+
+        $saldo = ($ehFuturo || $ehAtual)
+            ? max(0.0, $outstanding - $dueUntilPeriod)
+            : $this->getHistoricalOutstanding($userId, $mes, $ano, $outstanding);
+
+        $delta        = $saldo - $outstanding;
+        $deltaPercent = $outstanding > 0 ? round(($delta / $outstanding) * 100, 1) : 0.0;
+
+        return [
+            'saldo'              => round($saldo, 2),
+            'ehAtual'            => $ehAtual,
+            'ehFuturo'           => $ehFuturo,
+            'ehPassado'          => !($ehFuturo || $ehAtual),
+            'delta'              => round($delta, 2),
+            'deltaPercent'       => $deltaPercent,
+            'dueInPeriod'        => round($dueInPeriod, 2),
+            'parcelasPeriodo'    => $parcelasPeriodo,
+            'dueInPreviousPeriod' => round($dueInPrevPeriod, 2),
+            'deltaPeriod'        => round($dueInPeriod - $dueInPrevPeriod, 2),
+            'dueUntilPeriod'     => round($dueUntilPeriod, 2),
+            'parcelasAtePeriod'  => $parcelasAtePeriod,
+        ];
+    }
+
+    /**
+     * Total das parcelas previstas para o período e contagem, por mês (YYYY-MM).
+     *
+     * @return array<string, array{total: float, qtd: int}>
+     */
+    public function getOpenScheduleBuckets(int $userId): array
+    {
+        $buckets = [];
+
+        foreach ($this->buildOpenSchedule($userId) as $debt) {
+            foreach ($debt['yms'] as $ym) {
+                if (!isset($buckets[$ym])) {
+                    $buckets[$ym] = ['total' => 0.0, 'qtd' => 0];
+                }
+                $buckets[$ym]['total'] += $debt['valor'];
+                $buckets[$ym]['qtd']++;
+            }
+        }
+
+        ksort($buckets);
+
+        return $buckets;
+    }
+
+    /**
+     * Cronograma de parcelas em aberto por dívida, com o mês (YYYY-MM) de cada uma.
+     * As previsões já gravadas em movimentacoes têm precedência; o que faltar é
+     * derivado de data_inicio. Parcelas com vencimento no passado são descartadas.
+     *
+     * @return array<int, array{descricao: string, valor: float, yms: array<int,string>}>
+     */
+    private function buildOpenSchedule(int $userId): array
+    {
+        $debts = $this->db->fetchAll(
+            "SELECT id, descricao, valor_parcela, total_parcelas, parcelas_pagas, data_inicio
+             FROM `{$this->table}`
+             WHERE usuario_id = ? AND ativo = 1 AND parcelas_pagas < total_parcelas
+             ORDER BY descricao",
+            [$userId]
+        );
+
+        $nowYm = (new \DateTimeImmutable('first day of this month'))->format('Y-m');
+        $schedule = [];
+
+        foreach ($debts as $debt) {
+            $restam = max(0, (int) $debt['total_parcelas'] - (int) $debt['parcelas_pagas']);
+            $valor  = (float) $debt['valor_parcela'];
+
+            if ($restam === 0 || $valor <= 0) {
+                continue;
+            }
+
+            $schedule[] = [
+                'descricao' => (string) $debt['descricao'],
+                'valor'     => $valor,
+                'yms'       => $this->resolveDebtMonths($userId, $debt, $restam, $nowYm),
+            ];
+        }
+
+        return $schedule;
+    }
+
+    /**
+     * Meses de vencimento das parcelas em aberto de uma dívida.
+     *
+     * @return array<int,string>
+     */
+    private function resolveDebtMonths(int $userId, array $debt, int $restam, string $nowYm): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT data_competencia
+             FROM movimentacoes
+             WHERE usuario_id = ?
+               AND tipo = 'saida'
+               AND validado = 0
+               AND observacao LIKE ?
+             ORDER BY data_competencia ASC",
+            [$userId, '[DIVIDA_ID:' . (int) $debt['id'] . ']%']
+        );
+
+        $yms = [];
+        foreach ($rows as $row) {
+            $ym = (new \DateTimeImmutable((string) $row['data_competencia']))->format('Y-m');
+            if ($ym >= $nowYm && !in_array($ym, $yms, true)) {
+                $yms[] = $ym;
+            }
+        }
+
+        if (count($yms) >= $restam) {
+            return array_slice($yms, 0, $restam);
+        }
+
+        $faltam = $restam - count($yms);
+
+        // cursor aponta para o último mês já ocupado; sem registro, volta do
+        // mês da primeira parcela ainda em aberto (data_inicio + parcelas pagas)
+        $cursor = $yms !== []
+            ? $this->ymToDate($yms[count($yms) - 1])
+            : $this->resolveDebtStartMonth($debt)->modify('+' . (int) $debt['parcelas_pagas'] . ' months')
+                ->modify('-1 month');
+
+        for ($i = 0; $i < $faltam; $i++) {
+            $cursor = $cursor->modify('+1 month');
+            $ym = $cursor->format('Y-m');
+
+            if ($ym < $nowYm || in_array($ym, $yms, true)) {
+                continue;
+            }
+
+            $yms[] = $ym;
+        }
+
+        return $yms;
+    }
+
+    /**
+     * Converte a chave canônica de mês 'Y-m' (ex.: '2026-09') no primeiro dia
+     * do mês correspondente.
+     *
+     * Dois motivos para nunca usar o formato compacto 'Ym' aqui:
+     *  - new DateTimeImmutable('202610-01') é interpretado pelo PHP como hora
+     *    (20:26:10), não como data;
+     *  - '202610' é uma string decimal canônica, então o PHP a converte em
+     *    chave inteira ao usá-la como índice de array, quebrando o
+     *    strict comparison e o type hint string dos métodos.
+     */
+    private function ymToDate(string $ym): \DateTimeImmutable
+    {
+        [$year, $month] = array_pad(explode('-', $ym, 2), 2, '1');
+
+        return new \DateTimeImmutable(sprintf('%04d-%02d-01', (int) $year, (int) $month));
+    }
+
+    private function resolveDebtStartMonth(array $debt): \DateTimeImmutable
+    {
+        if (!empty($debt['data_inicio'])) {
+            $start = date('Y-m-01', strtotime((string) $debt['data_inicio']));
+            if (!empty($start)) {
+                return new \DateTimeImmutable($start);
+            }
+        }
+
+        return new \DateTimeImmutable('first day of this month');
+    }
+
+    /**
+     * Saldo devedor estimado no fim de um mês já vencido, reconstruído a partir
+     * do saldo atual: soma o que foi pago depois e remove o que foi contraído depois.
+     *
+     * O intervalo de pagamentos é limitado ao fim do mês atual de propósito:
+     * lançamentos com data de competência futura são parcelas *agendadas*, não
+     * quitadas, e somá-las inflaria o saldo reconstruído.
+     */
+    private function getHistoricalOutstanding(int $userId, int $mes, int $ano, float $outstanding): float
+    {
+        $limite = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $ano, $mes)));
+        $hoje = date('Y-m-t');
+
+        $pago = $this->db->fetch(
+            "SELECT COALESCE(SUM(valor), 0) AS total
+             FROM movimentacoes
+             WHERE usuario_id = ?
+               AND tipo = 'saida'
+               AND observacao LIKE '[DIVIDA_ID:%'
+               AND data_competencia > ?
+               AND data_competencia <= ?",
+            [$userId, $limite, $hoje]
+        );
+
+        $novo = $this->db->fetch(
+            "SELECT COALESCE(SUM(saldo_devedor), 0) AS total
+             FROM `{$this->table}`
+             WHERE usuario_id = ? AND ativo = 1 AND created_at > ?",
+            [$userId, $limite . ' 23:59:59']
+        );
+
+        return max(
+            0.0,
+            $outstanding
+            + (float) ($pago['total'] ?? 0)
+            - (float) ($novo['total'] ?? 0)
+        );
     }
 
     public function createDebt(int $userId, array $data): int

@@ -23,14 +23,31 @@ class InstallmentDebtController extends Controller
         $this->requireAuth();
 
         $userId = (int) $this->getUserId();
+
         $mes = (int) ($_GET['mes'] ?? date('m'));
         $ano = (int) ($_GET['ano'] ?? date('Y'));
+        if ($mes < 1 || $mes > 12) {
+            $mes = (int) date('m');
+        }
+        if ($ano < (int) date('Y') - 5 || $ano > (int) date('Y') + 10) {
+            $ano = (int) date('Y');
+        }
 
-        $debts = $this->model->findByUser($userId, false);
+        $debts    = $this->model->findByUser($userId, false, 'proximas');
         $openDebts = $this->model->findOpenForPeriod($userId, $mes, $ano);
 
         $totalOutstanding = $this->model->getTotalOutstanding($userId);
-        $openCount = $this->model->getOpenCount($userId);
+        $openCount        = $this->model->getOpenCount($userId);
+
+        $openInstallments = 0;
+        foreach ($debts as $debt) {
+            if ((int) $debt['ativo'] === 1) {
+                $openInstallments += max(
+                    0,
+                    (int) $debt['total_parcelas'] - (int) $debt['parcelas_pagas']
+                );
+            }
+        }
 
         $paidCurrent = $this->model->getMonthlyPaid($userId, $mes, $ano);
 
@@ -42,9 +59,16 @@ class InstallmentDebtController extends Controller
         }
         $paidPrevious = $this->model->getMonthlyPaid($userId, $prevMes, $prevAno);
 
-        $series   = $this->model->getReductionSeries($userId, 3, 9);
-        $savings  = $this->model->getTotalSavings($userId);
-        $forecast = $this->model->getForecastMatrix($userId, 12);
+        // projeção do período escolhido no filtro + grade de parcelas a partir dele
+        $projection = $this->model->getPeriodProjection($userId, $mes, $ano);
+        $targetYm   = sprintf('%04d-%02d', $ano, $mes);
+        $series     = $this->model->getReductionSeries($userId, 3, 9);
+        $savings    = $this->model->getTotalSavings($userId);
+        $forecast   = $this->model->getForecastMatrix($userId, 12, $targetYm);
+
+        $periodLabel  = str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $ano;
+        $periodLong   = $this->monthName($mes) . ' de ' . $ano;
+        $relativeInfo = $this->describePeriodOffset($mes, $ano);
 
         $labels = $series['labels'] ?? [];
         $totals = $series['totals'] ?? [];
@@ -88,8 +112,13 @@ class InstallmentDebtController extends Controller
             'ano'              => $ano,
             'totalOutstanding' => $totalOutstanding,
             'openCount'        => $openCount,
+            'openInstallments' => $openInstallments,
             'paidCurrent'      => $paidCurrent,
             'paidPrevious'     => $paidPrevious,
+            'projection'       => $projection,
+            'periodLabel'      => $periodLabel,
+            'periodLong'       => $periodLong,
+            'relativeInfo'     => $relativeInfo,
             'series'           => $series,
             'motivation'       => $motivation,
             'totalEconomia'    => $savings['economia'],
@@ -252,6 +281,41 @@ class InstallmentDebtController extends Controller
             $deleted ? 'Dívida excluída com sucesso!' : 'Dívida não encontrada.'
         );
         $this->redirect('/dividas-parceladas');
+    }
+
+    private function monthName(int $mes): string
+    {
+        $nomes = [
+            1 => 'Janeiro', 2 => 'Fevereiro', 3 => 'Março', 4 => 'Abril',
+            5 => 'Maio', 6 => 'Junho', 7 => 'Julho', 8 => 'Agosto',
+            9 => 'Setembro', 10 => 'Outubro', 11 => 'Novembro', 12 => 'Dezembro',
+        ];
+
+        return $nomes[$mes] ?? (string) $mes;
+    }
+
+    /**
+     * Traduz o período escolhido para algo que o usuário perceba de imediato
+     * ("mês atual", "daqui a 3 meses", "há 2 meses").
+     *
+     * @return array{texto: string, offset: int}
+     */
+    private function describePeriodOffset(int $mes, int $ano): array
+    {
+        $alvo = (new \DateTimeImmutable(sprintf('%04d-%02d-01', $ano, $mes)))
+            ->modify('first day of this month');
+        $hoje = new \DateTimeImmutable('first day of this month');
+
+        $diff = (int) $hoje->diff($alvo)->format('%r%m');
+        $texto = match (true) {
+            $diff === 0  => 'Mês atual',
+            $diff === 1  => 'Próximo mês',
+            $diff === -1 => 'Mês anterior',
+            $diff > 0    => 'Daqui a ' . $diff . ' meses',
+            default      => 'Há ' . abs($diff) . ' meses',
+        };
+
+        return ['texto' => $texto, 'offset' => $diff];
     }
 
     private function parseMoney(string $value): float

@@ -7,98 +7,221 @@ function fmtBrlDebt(float $v): string {
 }
 
 $deltaPaid = $paidCurrent - $paidPrevious;
+
+$projSaldo        = (float) ($projection['saldo'] ?? 0);
+$projDelta        = (float) ($projection['delta'] ?? 0);
+$projDeltaPct     = (float) ($projection['deltaPercent'] ?? 0);
+$projEhPassado    = (bool) ($projection['ehPassado'] ?? false);
+$projEhFuturo     = (bool) ($projection['ehFuturo'] ?? false);
+$projDuePeriodo   = (float) ($projection['dueInPeriod'] ?? 0);
+$projParcelasPer  = (int) ($projection['parcelasPeriodo'] ?? 0);
+$projDeltaPeriodo = (float) ($projection['deltaPeriod'] ?? 0);
+
+$periodOffset     = (int) ($relativeInfo['offset'] ?? 0);
+
+// rótulo do card de projeção: "projeção" para o futuro, "registro" para o passado
+$projCardLabel = $projEhPassado
+    ? 'Saldo devedor em ' . $periodLabel
+    : ($projEhFuturo
+        ? 'Saldo projetado para ' . $periodLabel
+        : 'Saldo devedor em ' . $periodLabel);
+
+$projCardKind = $projEhPassado ? 'Histórico' : ($projEhFuturo ? 'Projeção' : 'Mês atual');
+$projSemDivida = (float) $totalOutstanding <= 0;
+
+// No passado o delta é a diferença para hoje; nos demais é o quanto ainda falta.
+$projDeltaTexto = match (true) {
+    $projEhPassado && $projDelta <= 0 => 'a menos que hoje',
+    $projEhPassado => 'a mais que hoje',
+    $projDelta <= 0 => 'a reduzir',
+    default => 'a aumentar',
+};
+
+// demais metas do card
+$projMeta = match (true) {
+    $projEhPassado => 'Reconstruído a partir dos lançamentos registrados.',
+    $projSemDivida => 'Nenhuma dívida em aberto no momento.',
+    (float) $projDeltaPct > 0 => 'Redução de ' . number_format(abs($projDeltaPct), 1, ',', '.') . '% frente a hoje.',
+    (float) $projDeltaPct < 0 => 'Alta de ' . number_format(abs($projDeltaPct), 1, ',', '.') . '% frente a hoje.',
+    default => 'Sem diferença em relação a hoje.',
+};
+
+// ---------- tabela de parcelas: destaca a coluna do período selecionado ----
+$forecastLabels = $forecast['labels'] ?? [];
+$forecastRows   = $forecast['rows'] ?? [];
+$forecastTotals = $forecast['totals'] ?? [];
+$targetYm       = sprintf('%04d-%02d', $ano, $mes);
+$targetIndex    = -1;
+foreach ($forecastLabels as $i => $label) {
+    // label no formato 'm/Y' (ex.: '09/2026') — a comparação é textual e segura
+    if (preg_match('#^(\d{2})/(\d{4})$#', $label, $m) && ($m[2] . '-' . $m[1]) === $targetYm) {
+        $targetIndex = $i;
+        break;
+    }
+}
+
+// maior valor da tabela — serve de escala para as barras de intensidade
+$cellMax = 0.0;
+foreach ($forecastTotals as $v) {
+    $cellMax = max($cellMax, (float) $v);
+}
+foreach ($forecastRows as $r) {
+    foreach ($r['values'] as $v) {
+        $cellMax = max($cellMax, (float) $v);
+    }
+}
+$globalMax = $cellMax;
+
+// ---------- versão mobile: matriz transposta (mês → dívidas do mês) -------
+// Na horizontal a tabela fica ilegível; no mobile mostramos um bloco por mês
+// com as parcelas_devidas naquele mês, evitando qualquer scroll lateral.
+$forecastMonthList = [];
+$forecastGrandTotal = 0.0;
+if (!empty($forecastLabels) && !empty($forecastRows)) {
+    foreach ($forecastRows as $row) {
+        foreach ($row['values'] as $i => $value) {
+            if ((float) $value <= 0 || !isset($forecastLabels[$i])) {
+                continue;
+            }
+            if (!isset($forecastMonthList[$i])) {
+                $forecastMonthList[$i] = [
+                    'label'    => $forecastLabels[$i],
+                    'isTarget' => $i === $targetIndex,
+                    'lines'    => [],
+                    'total'    => 0.0,
+                ];
+            }
+            $forecastMonthList[$i]['lines'][] = [
+                'descricao' => $row['descricao'],
+                'value'     => round((float) $value, 2),
+            ];
+            $forecastMonthList[$i]['total'] += (float) $value;
+            $forecastGrandTotal += (float) $value;
+        }
+    }
+    ksort($forecastMonthList);
+    foreach ($forecastMonthList as &$month) {
+        $month['total'] = round($month['total'], 2);
+    }
+    unset($month);
+}
+$forecastGrandTotal = round($forecastGrandTotal, 2);
 ?>
 
 <div class="page-header">
     <div>
         <h1 class="page-title">Dívidas Parceladas</h1>
-        <p class="page-subtitle">Monitore parcelas abertas e acompanhe a redução da dívida total</p>
-    </div>
-    <div class="page-header-actions">
-        <button class="btn btn-primary" onclick="openModal('modalNovaDivida')">
-            <i class="fa-solid fa-plus"></i> Nova Dívida
-        </button>
+        <p class="page-subtitle">Monitore parcelas abertas e projete a redução da dívida total</p>
     </div>
 </div>
 
-<div class="cards-grid cards-grid-4">
-    <div class="summary-card card-expense">
-        <div class="summary-card-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
-        <div class="summary-card-value"><?= (int) $openCount ?></div>
-        <div class="summary-card-label">Dívidas Ativas</div>
-    </div>
-    <div class="summary-card card-balance-neg">
-        <div class="summary-card-icon"><i class="fa-solid fa-sack-dollar"></i></div>
-        <div class="summary-card-value"><?= fmtBrlDebt((float) $totalOutstanding) ?></div>
-        <div class="summary-card-label">Saldo Devedor Total</div>
-    </div>
-    <div class="summary-card card-balance-pos">
-        <div class="summary-card-icon"><i class="fa-solid fa-chart-line"></i></div>
-        <div class="summary-card-value"><?= fmtBrlDebt((float) $paidCurrent) ?></div>
-        <div class="summary-card-label">Redução em <?= str_pad((string)$mes, 2, '0', STR_PAD_LEFT) ?>/<?= $ano ?></div>
-        <div class="summary-card-footer <?= $deltaPaid >= 0 ? 'text-success' : 'text-danger' ?>">
-            <i class="fa-solid <?= $deltaPaid >= 0 ? 'fa-arrow-up' : 'fa-arrow-down' ?>"></i>
-            <?= fmtBrlDebt(abs((float) $deltaPaid)) ?> vs mês anterior
-        </div>
-    </div>
-    <?php
-        $saldoEco = (float) $totalEconomia - (float) $totalJuros;
-        $ecoClass = $saldoEco >= 0 ? 'card-balance-pos' : 'card-balance-neg';
-    ?>
-    <div class="summary-card <?= $ecoClass ?>">
-        <div class="summary-card-icon">
-            <i class="fa-solid <?= $saldoEco >= 0 ? 'fa-tag' : 'fa-receipt' ?>"></i>
-        </div>
-        <div class="summary-card-value" style="font-size:1rem">
-            <?php if ((float)$totalEconomia > 0): ?>
-            <span class="text-success" title="Economia acumulada"><i class="fa-solid fa-tag fa-xs"></i> <?= fmtBrlDebt((float)$totalEconomia) ?></span><br>
-            <?php endif; ?>
-            <?php if ((float)$totalJuros > 0): ?>
-            <span class="text-danger" title="Juros acumulados"><i class="fa-solid fa-receipt fa-xs"></i> <?= fmtBrlDebt((float)$totalJuros) ?></span>
-            <?php endif; ?>
-            <?php if ((float)$totalEconomia == 0 && (float)$totalJuros == 0): ?>
-            <span style="opacity:.5">—</span>
-            <?php endif; ?>
-        </div>
-        <div class="summary-card-label">Economia / Juros acumulados</div>
-        <?php if ((float)$totalEconomia > 0 || (float)$totalJuros > 0): ?>
-        <div class="summary-card-footer <?= $saldoEco >= 0 ? 'text-success' : 'text-danger' ?>">
-            Saldo líquido: <?= ($saldoEco < 0 ? '−' : '+') ?> <?= fmtBrlDebt(abs($saldoEco)) ?>
-        </div>
-        <?php endif; ?>
-    </div>
-</div>
-
-<div class="card filter-card">
-    <form method="GET" action="<?= $basePath ?>/dividas-parceladas" class="filter-form filter-form-inline">
+<div class="card filter-card debt-period-bar">
+    <form method="GET" action="<?= $basePath ?>/dividas-parceladas" class="filter-form filter-open" id="debtPeriodForm">
         <div class="filter-group">
-            <label class="filter-label">Mês</label>
-            <select name="mes" class="form-control form-control-sm">
+            <label class="filter-label" for="filtroMes">Mês</label>
+            <select name="mes" id="filtroMes" class="form-control form-control-sm" onchange="this.form.submit()">
                 <?php for ($m = 1; $m <= 12; $m++): ?>
                 <option value="<?= $m ?>" <?= $m === (int) $mes ? 'selected' : '' ?>><?= str_pad((string)$m, 2, '0', STR_PAD_LEFT) ?></option>
                 <?php endfor; ?>
             </select>
         </div>
         <div class="filter-group">
-            <label class="filter-label">Ano</label>
-            <select name="ano" class="form-control form-control-sm">
-                <?php for ($y = (int) date('Y') - 3; $y <= (int) date('Y') + 1; $y++): ?>
+            <label class="filter-label" for="filtroAno">Ano</label>
+            <select name="ano" id="filtroAno" class="form-control form-control-sm" onchange="this.form.submit()">
+                <?php for ($y = (int) date('Y') - 5; $y <= (int) date('Y') + 10; $y++): ?>
                 <option value="<?= $y ?>" <?= $y === (int) $ano ? 'selected' : '' ?>><?= $y ?></option>
                 <?php endfor; ?>
             </select>
         </div>
         <div class="filter-actions">
             <button type="submit" class="btn btn-primary btn-sm">
-                <i class="fa-solid fa-filter"></i> Atualizar período
+                <i class="fa-solid fa-filter"></i> Atualizar
             </button>
         </div>
+        <div class="filter-period-hint">
+            <i class="fa-regular fa-clock"></i>
+            <span><strong><?= htmlspecialchars((string) $periodLong) ?></strong> · <?= htmlspecialchars((string) $relativeInfo['texto']) ?></span>
+        </div>
+        <button type="button" class="btn btn-primary debt-period-new" onclick="openModal('modalNovaDivida')">
+            <i class="fa-solid fa-plus"></i> Nova Dívida
+        </button>
     </form>
+</div>
+
+<div class="cards-grid cards-grid-3 cards-stack-mobile">
+    <div class="summary-card card-balance-neg">
+        <div class="summary-card-header">
+            <div class="summary-card-icon"><i class="fa-solid fa-sack-dollar"></i></div>
+        </div>
+        <div class="summary-card-value"><?= fmtBrlDebt((float) $totalOutstanding) ?></div>
+        <div class="summary-card-label">
+            Saldo devedor total
+            <span class="summary-card-count"><?= (int) $openCount ?>
+                <?= (int) $openCount === 1 ? 'dívida ativa' : 'dívidas ativas' ?></span>
+        </div>
+        <div class="summary-card-footer">
+            <i class="fa-solid fa-layer-group"></i>
+            <?= (int) $openInstallments ?>
+            <?= (int) $openInstallments === 1 ? 'parcela em aberto' : 'parcelas em aberto' ?>
+        </div>
+    </div>
+
+    <div class="summary-card <?= $projEhPassado ? 'card-neutral' : ($projEhFuturo ? 'card-total-pos' : 'card-balance-pos') ?>">
+        <div class="summary-card-header">
+            <div class="summary-card-icon"><i class="fa-solid fa-chart-line"></i></div>
+            <span class="badge <?= $projEhPassado ? 'badge-secondary' : 'badge-primary' ?>"><?= $projCardKind ?></span>
+        </div>
+        <div class="summary-card-value"><?= fmtBrlDebt($projSaldo) ?></div>
+        <div class="summary-card-label"><?= $projCardLabel ?></div>
+        <div class="summary-card-footer<?= $projSemDivida ? '' : ' ' . ($projDelta <= 0 ? 'text-success' : 'text-danger') ?>">
+            <?php if ($projSemDivida): ?>
+                <i class="fa-solid fa-circle-check"></i>
+                Nenhuma dívida em aberto no momento.
+            <?php else: ?>
+                <i class="fa-solid <?= $projDelta <= 0 ? 'fa-arrow-down' : 'fa-arrow-up' ?>"></i>
+                <?= fmtBrlDebt(abs($projDelta)) ?> <?= $projDeltaTexto ?> · <?= $projMeta ?>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <div class="summary-card card-expense">
+        <div class="summary-card-header">
+            <div class="summary-card-icon"><i class="fa-solid fa-calendar-day"></i></div>
+        </div>
+        <div class="summary-card-value"><?= fmtBrlDebt($projDuePeriodo) ?></div>
+        <div class="summary-card-label">
+            Parcelas em <?= $periodLabel ?>
+            <span class="summary-card-count"><?= $projParcelasPer ?>
+                <?= $projParcelasPer === 1 ? 'parcela' : 'parcelas' ?></span>
+        </div>
+        <div class="summary-card-footer <?= $projDeltaPeriodo <= 0 ? 'text-success' : 'text-danger' ?>">
+            <i class="fa-solid <?= $projDeltaPeriodo <= 0 ? 'fa-arrow-down' : 'fa-arrow-up' ?>"></i>
+            <?= fmtBrlDebt(abs($projDeltaPeriodo)) ?> <?= $projDeltaPeriodo <= 0 ? 'a menos' : 'a mais' ?> que o mês anterior
+        </div>
+    </div>
 </div>
 
 <div class="debt-main-grid">
     <div class="card debt-list-card">
         <div class="card-header">
-            <h3 class="card-title">Dívidas Registradas</h3>
+            <div class="card-title-group">
+                <h3 class="card-title"><i class="fa-solid fa-list-ul text-primary"></i> Dívidas Registradas</h3>
+                <p class="card-subtitle"><?= count($debts) ?> <?= count($debts) === 1 ? 'contrato' : 'contratos' ?> no total</p>
+            </div>
+            <?php if ((float) $totalEconomia > 0 || (float) $totalJuros > 0): ?>
+            <div class="debt-savings-chips">
+                <?php if ((float) $totalEconomia > 0): ?>
+                <span class="badge badge-success" title="Economia acumulada em relação ao valor original da parcela">
+                    <i class="fa-solid fa-tag"></i> <?= fmtBrlDebt((float) $totalEconomia) ?> economizados
+                </span>
+                <?php endif; ?>
+                <?php if ((float) $totalJuros > 0): ?>
+                <span class="badge badge-danger" title="Juros acumulados em relação ao valor original da parcela">
+                    <i class="fa-solid fa-receipt"></i> <?= fmtBrlDebt((float) $totalJuros) ?> de juros
+                </span>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
         </div>
         <div class="card-body debt-list-body">
             <?php if (empty($debts)): ?>
@@ -124,15 +247,15 @@ $deltaPaid = $paidCurrent - $paidPrevious;
                             <h4 class="debt-item-title"><?= htmlspecialchars((string) $debt['descricao']) ?></h4>
                             <p class="debt-item-sub">Saldo devedor: <strong><?= fmtBrlDebt((float) $debt['saldo_devedor']) ?></strong></p>
                             <?php if ((float)$debt['total_economia'] > 0 || (float)$debt['total_juros'] > 0): ?>
-                            <p class="debt-item-sub" style="margin-top:2px;display:flex;gap:10px;flex-wrap:wrap">
+                            <p class="debt-item-tags">
                                 <?php if ((float)$debt['total_economia'] > 0): ?>
-                                <span class="text-success" style="font-size:.72rem">
-                                    <i class="fa-solid fa-tag fa-xs"></i> Economia: <?= fmtBrlDebt((float)$debt['total_economia']) ?>
+                                <span class="badge badge-success">
+                                    <i class="fa-solid fa-tag"></i> <?= fmtBrlDebt((float)$debt['total_economia']) ?>
                                 </span>
                                 <?php endif; ?>
                                 <?php if ((float)$debt['total_juros'] > 0): ?>
-                                <span class="text-danger" style="font-size:.72rem">
-                                    <i class="fa-solid fa-receipt fa-xs"></i> Juros: <?= fmtBrlDebt((float)$debt['total_juros']) ?>
+                                <span class="badge badge-danger">
+                                    <i class="fa-solid fa-receipt"></i> <?= fmtBrlDebt((float)$debt['total_juros']) ?>
                                 </span>
                                 <?php endif; ?>
                             </p>
@@ -140,10 +263,21 @@ $deltaPaid = $paidCurrent - $paidPrevious;
                         </div>
                         <div class="debt-item-value-wrap">
                             <div class="debt-item-value"><?= fmtBrlDebt((float) $debt['valor_parcela']) ?></div>
-                            <div class="debt-item-progress">(<?= (int) $debt['parcelas_pagas'] ?>/<?= (int) $debt['total_parcelas'] ?>)</div>
+                            <div class="debt-item-progress">
+                                <?= (int) $debt['parcelas_pagas'] ?>/<?= (int) $debt['total_parcelas'] ?> pagas
+                            </div>
                         </div>
                     </div>
-                    <div class="debt-item-actions" style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px">
+                    <?php
+                        $pctPago = (int) $debt['total_parcelas'] > 0
+                            ? round(((int) $debt['parcelas_pagas'] / (int) $debt['total_parcelas']) * 100)
+                            : 0;
+                    ?>
+                    <div class="debt-item-progressbar" role="progressbar"
+                         aria-valuenow="<?= $pctPago ?>" aria-valuemin="0" aria-valuemax="100">
+                        <span class="debt-item-progressfill" style="--pct: <?= $pctPago ?>%"></span>
+                    </div>
+                    <div class="debt-item-actions">
                         <?php if ((int) $debt['ativo'] === 1 && (int) $debt['parcelas_pagas'] < (int) $debt['total_parcelas']): ?>
                         <button type="button" class="btn btn-ghost btn-sm text-success" title="Quitar dívida"
                                 onclick="settleDebt(<?= (int) $debt['id'] ?>, '<?= htmlspecialchars((string) $csrf) ?>')">
@@ -192,51 +326,136 @@ $deltaPaid = $paidCurrent - $paidPrevious;
 
 <div class="card debt-forecast-card">
     <div class="card-header">
-        <h3 class="card-title">Demonstrativo de Parcelas Futuras</h3>
-        <?php if (!empty($forecast['labels'])): ?>
-        <span class="badge badge-info"><?= count($forecast['labels']) ?> <?= count($forecast['labels']) === 1 ? 'mês' : 'meses' ?> de previsão</span>
+        <div class="card-title-group">
+            <h3 class="card-title"><i class="fa-solid fa-calendar-days text-primary"></i> Demonstrativo de Parcelas Futuras</h3>
+            <p class="card-subtitle">Parcelas previstas a partir de <?= htmlspecialchars((string) $periodLabel) ?></p>
+        </div>
+        <?php if (!empty($forecastLabels)): ?>
+        <span class="badge badge-info">
+            <i class="fa-regular fa-calendar"></i>
+            <?= count($forecastLabels) ?> <?= count($forecastLabels) === 1 ? 'mês' : 'meses' ?> de previsão
+        </span>
         <?php endif; ?>
     </div>
     <div class="card-body">
-        <?php if (empty($forecast['rows'])): ?>
+        <?php if (empty($forecastLabels) || empty($forecastRows)): ?>
         <div class="empty-state py-10">
             <i class="fa-solid fa-calendar-check"></i>
-            <p>Nenhuma parcela em aberto para projetar.</p>
+            <p>Nenhuma parcela em aberto para projetar a partir de <?= htmlspecialchars((string) $periodLabel) ?>.</p>
         </div>
         <?php else: ?>
-        <div class="table-responsive">
+        <div class="debt-forecast-mobile show-on-mobile">
+            <div class="dfm-topline">
+                <span class="dfm-topline-info">
+                    <i class="fa-regular fa-calendar"></i>
+                    <?= count($forecastMonthList) ?> <?= count($forecastMonthList) === 1 ? 'mês' : 'meses' ?> com parcelas
+                </span>
+                <span class="dfm-topline-total">
+                    Total previsto <strong><?= fmtBrlDebt($forecastGrandTotal) ?></strong>
+                </span>
+            </div>
+
+            <div class="dfm-list">
+                <?php foreach ($forecastMonthList as $month): ?>
+                <div class="dfm-month<?= $month['isTarget'] ? ' is-target' : '' ?>">
+                    <div class="dfm-month-head">
+                        <span class="dfm-month-label">
+                            <i class="fa-regular fa-calendar-check"></i>
+                            <?= htmlspecialchars((string) $month['label']) ?>
+                        </span>
+                        <?php if ($month['isTarget']): ?>
+                        <span class="dfm-month-flag"><i class="fa-solid fa-location-dot"></i> selecionado</span>
+                        <?php endif; ?>
+                        <span class="dfm-month-total"><?= fmtBrlDebt((float) $month['total']) ?></span>
+                    </div>
+                    <ul class="dfm-lines">
+                        <?php foreach ($month['lines'] as $line): ?>
+                        <li class="dfm-line">
+                            <span class="dfm-line-desc"><?= htmlspecialchars((string) $line['descricao']) ?></span>
+                            <span class="dfm-line-value"><?= fmtBrlDebt((float) $line['value']) ?></span>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <div class="table-responsive debt-forecast-scroll hide-on-mobile">
             <table class="table debt-forecast-table">
                 <thead>
                     <tr>
-                        <th>Dívida</th>
-                        <?php foreach ($forecast['labels'] as $label): ?>
-                        <th class="text-right"><?= htmlspecialchars($label) ?></th>
+                        <th class="debt-forecast-sticky-col">Dívida</th>
+                        <?php foreach ($forecastLabels as $i => $label): ?>
+                        <th class="text-right <?= $i === $targetIndex ? 'is-target' : '' ?>">
+                            <span class="debt-forecast-th-label"><?= htmlspecialchars($label) ?></span>
+                            <?php if ($i === $targetIndex): ?>
+                            <span class="debt-forecast-th-flag"><i class="fa-solid fa-location-dot"></i> selecionado</span>
+                            <?php endif; ?>
+                        </th>
                         <?php endforeach; ?>
-                        <th class="text-right">Total</th>
+                        <th class="text-right debt-forecast-total-col">Total</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($forecast['rows'] as $row): ?>
+                    <?php foreach ($forecastRows as $r => $row): ?>
                     <tr>
-                        <td><?= htmlspecialchars($row['descricao']) ?></td>
-                        <?php foreach ($row['values'] as $value): ?>
-                        <td class="text-right"><?= $value > 0 ? fmtBrlDebt((float) $value) : '—' ?></td>
+                        <td class="debt-forecast-sticky-col">
+                            <span class="debt-forecast-desc"><?= htmlspecialchars($row['descricao']) ?></span>
+                        </td>
+                        <?php foreach ($row['values'] as $i => $value): ?>
+                        <?php
+                            $ratio = $globalMax > 0 ? ((float) $value / $globalMax) : 0;
+                            $isTarget = $i === $targetIndex;
+                        ?>
+                        <td class="text-right <?= $isTarget ? 'is-target' : '' ?> <?= $value > 0 ? 'has-value' : 'is-empty' ?>">
+                            <span class="debt-forecast-cell">
+                                <?php if ($value > 0): ?>
+                                <span class="debt-forecast-bar" style="--bar: <?= round($ratio * 100, 1) ?>%"></span>
+                                <span class="debt-forecast-amount"><?= fmtBrlDebt((float) $value) ?></span>
+                                <?php else: ?>
+                                <span class="debt-forecast-dash">—</span>
+                                <?php endif; ?>
+                            </span>
+                        </td>
                         <?php endforeach; ?>
-                        <td class="text-right"><strong><?= fmtBrlDebt((float) $row['total']) ?></strong></td>
+                        <td class="text-right debt-forecast-total-col">
+                            <strong><?= fmtBrlDebt((float) $row['total']) ?></strong>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
                 <tfoot>
                     <tr>
-                        <th>Total do mês</th>
-                        <?php foreach ($forecast['totals'] as $total): ?>
-                        <th class="text-right"><?= fmtBrlDebt((float) $total) ?></th>
+                        <th class="debt-forecast-sticky-col">Total do mês</th>
+                        <?php foreach ($forecastTotals as $i => $total): ?>
+                        <?php
+                            $ratio = $globalMax > 0 ? ((float) $total / $globalMax) : 0;
+                            $isTarget = $i === $targetIndex;
+                        ?>
+                        <th class="text-right <?= $isTarget ? 'is-target' : '' ?>">
+                            <span class="debt-forecast-cell">
+                                <?php if ($total > 0): ?>
+                                <span class="debt-forecast-bar is-total" style="--bar: <?= round($ratio * 100, 1) ?>%"></span>
+                                <span class="debt-forecast-amount"><?= fmtBrlDebt((float) $total) ?></span>
+                                <?php else: ?>
+                                <span class="debt-forecast-dash">—</span>
+                                <?php endif; ?>
+                            </span>
+                        </th>
                         <?php endforeach; ?>
-                        <th class="text-right"><?= fmtBrlDebt((float) array_sum($forecast['totals'])) ?></th>
+                        <th class="text-right debt-forecast-total-col">
+                            <?= fmtBrlDebt((float) array_sum($forecastTotals)) ?>
+                        </th>
                     </tr>
                 </tfoot>
             </table>
         </div>
+        <p class="debt-forecast-hint">
+            <i class="fa-solid fa-circle-info"></i>
+            Role na horizontal para ver todos os meses. O período selecionado no filtro
+            <?= $targetIndex >= 0 ? '<strong>está destacado</strong>' : '<strong>não aparece nesta projeção</strong>' ?>.
+        </p>
         <?php endif; ?>
     </div>
 </div>
